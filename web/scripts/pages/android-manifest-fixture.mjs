@@ -36,7 +36,7 @@ export const WEB_ROOT = resolve(import.meta.dirname, "..", "..");
  * modules through `IMPORTS`, which are absolute `file://` URLs into the real
  * repository, and must `process.stdout.write(JSON.stringify(...))`.
  */
-export function generateWithAndroidManifest(manifest, body) {
+export function generateWithAndroidManifest(manifest, body, windowsManifest) {
   const root = mkdtempSync(join(tmpdir(), "relayium-manifest-"));
   try {
     writeFileSync(join(root, "android-release.json"), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -44,6 +44,8 @@ export function generateWithAndroidManifest(manifest, body) {
     // needs it. Copied, never linked: a link would let a mistake here reach the
     // real file.
     copyFileSync(join(WEB_ROOT, "native-releases.json"), join(root, "native-releases.json"));
+    if (windowsManifest) writeFileSync(join(root, "windows-release.json"), JSON.stringify(windowsManifest) + "\n");
+    else copyFileSync(join(WEB_ROOT, "windows-release.json"), join(root, "windows-release.json"));
 
     const imports = {
       apps: pathToFileURL(join(WEB_ROOT, "scripts/pages/content/apps.mjs")).href,

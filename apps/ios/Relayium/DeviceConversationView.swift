@@ -54,6 +54,7 @@ struct DeviceConversationView: View {
     @State private var draft = ""
     @State private var isChoosingFiles = false
     @State private var copiedEntryID: String?
+    @State private var expandedEntries: Set<String> = []
     /// The one entry whose delete is waiting on a confirmation.
     ///
     /// Held as the ENTRY rather than a flag: the warning differs by row — a
@@ -114,6 +115,7 @@ struct DeviceConversationView: View {
         // A presented Open / Share / Save to Files is withdrawn the moment its
         // account or its row stops being current.
         .onChange(of: inbox.activeAccountID) { account in
+            expandedEntries.removeAll()
             receivedFiles.invalidate(scope: receivedScope, accountID: account)
         }
         .onChange(of: inbox.conversations) { _ in
@@ -575,6 +577,10 @@ struct DeviceConversationView: View {
                 Text(InboxTimelinePresentation.direction(of: entry, peerName: peerName))
                     .font(.caption.weight(.semibold))
                     .accessibilityIdentifier("inbox-entry-direction")
+                Spacer()
+                if entry.kind == .message, let message = messageBody(entry) {
+                    messageCopyButton(entry, message: message, identifier: "inbox-entry-copy-top")
+                }
             }
             entryBody(entry)
             if let state = InboxTimelinePresentation.state(of: entry) {
@@ -613,18 +619,24 @@ struct DeviceConversationView: View {
     @ViewBuilder
     private func entryBody(_ entry: InboxTimelineEntry) -> some View {
         if entry.kind == .message, let message = messageBody(entry) {
-            Text(message.text)
+            let preview = InboxMessagePresentation.collapsedPreview(message.text)
+            let expanded = expandedEntries.contains(entry.id)
+            if preview != nil && expanded {
+                messageDisclosureButton(entry, expanded: true, placement: "top")
+            }
+            Text(expanded ? message.text : preview ?? message.text)
                 .font(.callout)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
-            Button(L10n.t(copiedEntryID == entry.id ? .commonCopied : .commonCopy)) {
-                UIPasteboard.general.string = message.text
-                copiedEntryID = entry.id
+                .accessibilityIdentifier("inbox-entry-message-body")
+            HStack {
+                if preview != nil {
+                    messageDisclosureButton(entry, expanded: expanded, placement: "bottom")
+                }
+                if preview == nil || expanded {
+                    messageCopyButton(entry, message: message, identifier: "inbox-entry-copy")
+                }
             }
-            .borderedAction()
-            .accessibilityLabel(InboxMessagePresentation.copyActionLabel(
-                copied: copiedEntryID == entry.id))
-            .accessibilityIdentifier("inbox-entry-copy")
         } else if entry.kind == .files {
             Text(InboxTimelinePresentation.fileNames(of: entry))
                 .font(.callout)
@@ -645,6 +657,31 @@ struct DeviceConversationView: View {
             InlineMessage(.warning, L10n.t(.inboxConversationMessageMissing))
                 .accessibilityIdentifier("inbox-conversation-message-missing")
         }
+    }
+
+    private func messageDisclosureButton(_ entry: InboxTimelineEntry, expanded: Bool,
+                                         placement: String) -> some View {
+        Button(L10n.t(expanded ? .inboxMessageCollapse : .inboxMessageExpand)) {
+            if expanded {
+                expandedEntries.remove(entry.id)
+            } else {
+                expandedEntries.insert(entry.id)
+            }
+        }
+        .borderedAction()
+        .accessibilityIdentifier("inbox-entry-text-disclosure-\(placement)")
+    }
+
+    private func messageCopyButton(_ entry: InboxTimelineEntry, message: InboxMessage,
+                                   identifier: String) -> some View {
+        Button(L10n.t(copiedEntryID == entry.id ? .commonCopied : .commonCopy)) {
+            UIPasteboard.general.string = message.text
+            copiedEntryID = entry.id
+        }
+        .borderedAction()
+        .accessibilityLabel(InboxMessagePresentation.copyActionLabel(
+            copied: copiedEntryID == entry.id))
+        .accessibilityIdentifier(identifier)
     }
 
     /// The protected body behind one row, read from the store its direction

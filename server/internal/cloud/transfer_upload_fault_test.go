@@ -114,6 +114,23 @@ func (h *hookWatch) install(c *Client) {
 	}
 }
 
+// confirmAfterOrigin establishes a committed-response premise before starting
+// the client's unchanged synthetic confirmation clock. Use it ONLY for tests
+// about an answer lost/rewritten after the real handler completed; tests about
+// an unhandled or incomplete request must retain their original clocks.
+func confirmAfterOrigin(c *Client, ctx context.Context, done <-chan struct{}) {
+	confirming := c.Confirming
+	c.Confirming = func() {
+		if confirming != nil {
+			confirming()
+		}
+		select {
+		case <-done:
+		case <-ctx.Done():
+		}
+	}
+}
+
 // upload runs Upload and marks the return the way the CLI does (it clears its
 // progress line at that moment).
 func (h *hookWatch) upload(c *Client, ctx context.Context, path string) (string, error) {
@@ -234,13 +251,17 @@ func TestUploadCommittedThenConnectionDroppedIsNeverRetried(t *testing.T) {
 	fc := newFaultCentral(t)
 	r := atUploadPOST
 	r.Action = sendtest.DropResponse
-	fc.env.Faults.Add(&r)
+	r.Hit = make(chan struct{})
+	drop := fc.env.Faults.Add(&r)
 
 	p := writeFaultFile(t, 3<<20+17)
 	c := fc.client(fc.env.TS.URL)
 	var h hookWatch
 	h.install(c)
-	id, err := h.upload(c, context.Background(), p)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	confirmAfterOrigin(c, ctx, drop.Hit)
+	id, err := h.upload(c, ctx, p)
 	if err == nil || id != "" {
 		t.Fatalf("Upload = (%q, %v); an answer that never arrived must not be reported as success", id, err)
 	}
@@ -276,15 +297,17 @@ func TestUploadCommittedThenAnswerWithheldIsUnconfirmedNotFailed(t *testing.T) {
 	var h hookWatch
 	h.install(c)
 	start := time.Now()
-	_, err := h.upload(c, context.Background(), p)
+	ctx, cancel := context.WithDeadline(context.Background(), start.Add(10*time.Second))
+	defer cancel()
+	confirmAfterOrigin(c, ctx, hold.Hit)
+	_, err := h.upload(c, ctx, p)
 	var unconfirmed *UploadUnconfirmedError
 	if !errors.As(err, &unconfirmed) {
 		t.Fatalf("err = %v; a withheld answer must be reported as unconfirmed, not as a failure", err)
 	}
-	// The client may give up (confirm deadline) before central's handler replies;
-	// Hit marks that reply, commit or refusal, and stored == 1 below proves commit.
-	// Wait for it within the same 10s from start, which the check below holds
-	// the whole observation to.
+	// Hit is established before the confirm clock; stored == 1 below proves
+	// that the reply followed a commit, not a refusal. The unchanged 10s
+	// whole-observation bound covers both setup and the withheld answer.
 	wait := time.NewTimer(time.Until(start.Add(10 * time.Second)))
 	defer wait.Stop()
 	select {

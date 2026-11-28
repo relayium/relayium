@@ -1017,6 +1017,13 @@ export interface Messages {
       // offered, and the version comes from the release manifest rather than
       // from this table — a translated string must never be able to disagree
       // with the artifact.
+      windows?: {
+        name: string;
+        desc: string;
+        cta: (version: string) => string;
+        requirements: string;
+        installNote: string;
+      };
       android: {
         name: string;
         desc: string;

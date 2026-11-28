@@ -1,6 +1,6 @@
 # Admin console: Passkey-only sign-in
 
-The `/admin` console accepts **passkeys only**. There is no admin password, no
+The admin console (default path `/admin`) accepts **passkeys only**. There is no admin password, no
 TOTP code and no fallback: sign-in and every high-risk confirmation need a
 registered passkey. Passkeys are added, approved and revoked **only on the
 server**, with the local `relayium-server admin` command. No browser — not even
@@ -189,5 +189,174 @@ older password/TOTP sign-in and browser credential management. Keep
 that rollback path; remove it afterwards. Passkeys approved on the new version
 are ordinary `admin_credentials` rows and keep working on the older binary.
 
-Cloudflare, reverse-proxy or IP allowlists are independent of this change and
-remain a good additional layer for `/admin`.
+Cloudflare and reverse-proxy access controls can provide additional independent
+layers in front of the console. The built-in IP policy below applies before
+any admin page, login, enrollment or operation.
+
+
+## Deployment-only path and IP access policy
+
+Keep actual paths and IP addresses in the server environment or a private
+server environment file, never in the public repository. These examples use
+reserved documentation IPs and are not production configuration:
+
+```bash
+RELAYIUM_ADMIN_PATH=/operator_console
+RELAYIUM_ADMIN_ALLOWED_IPS=192.0.2.10,2001:db8::10
+# Only if a reverse proxy is used; list the actual trusted proxy peers/ranges.
+RELAYIUM_ADMIN_TRUSTED_PROXIES=127.0.0.1/32,::1/128
+```
+
+Equivalent server flags are `-admin-path`, `-admin-allowed-ips`, and
+`-admin-trusted-proxies`. The path defaults to `/admin`, must be one segment
+containing 1–64 ASCII letters, digits, underscores or hyphens (starting with a
+letter or digit), and cannot overlap reserved service/product routes. Malformed
+settings refuse startup. Custom paths replace `/admin` entirely: the old path
+returns 404, with no redirect. Links, passkey endpoints, language selection,
+confirmation, and cookie scopes use the configured path. Changing it requires
+signing in again; old-path cookies do not authenticate the new path.
+
+An empty allowlist disables the built-in IP restriction for compatibility.
+A nonempty allowlist admits only the exact IPv4/IPv6 addresses listed; it does
+not replace passkey authentication. CIDRs are supported only for trusted
+proxies, not for allowed clients. IPv4-mapped IPv6 clients normalize to IPv4.
+Every request within the configured admin path, including unknown endpoints
+and requests with an existing valid session, passes the same IP check first.
+Public pages, ordinary account APIs and file transfers are unaffected.
+
+Only requests from a nonallowlisted IP increment its persistent denial count.
+The first three are already refused; the fourth creates a permanent admin ban.
+Counts saturate at four, survive server restarts, and never expire. A ban wins
+even if the IP is subsequently added to the allowlist, until explicitly cleared
+on the server. Allowed IP requests never increment the count. The table is
+limited to 100,000 distinct IP records; on exhaustion new nonallowlisted IPs
+remain denied without storing a record or evicting existing bans. Disabling the
+IP policy intentionally disables this IP enforcement, but preserves records.
+
+Without explicitly trusted proxies, only the TCP peer IP is used and all
+forwarded headers are ignored. When the direct peer is trusted, the bounded
+`X-Forwarded-For` chain is walked from right to left through trusted hops to the
+first untrusted client. Missing or malformed required values fail closed.
+`CF-Connecting-IP`, `X-Real-IP` and `Forwarded` cannot override that choice.
+Configure each proxy to overwrite client-supplied headers or append its observed
+peer correctly; trust only the actual proxy ranges. A proxy that overwrites
+X-Forwarded-For with another proxy's IP hides the original client: verify the
+complete deployment chain before enabling the policy. There is no universal
+proxy default. Policy/database failures refuse admin access rather than bypass
+it; IP-denied requests return 403 without identifying the ban state.
+
+Use the same `RELAYIUM_ADMIN_PATH` for the local admin command, or pass
+`--admin-path /operator_console` alongside `--db` and `--base-url`, so enrollment
+and approval links point to the configured path. The command intentionally does
+not load the server's environment file automatically: supply the setting in its
+process environment or as a flag. It is local access to the database, not an
+HTTP endpoint, and remains available for recovery when HTTP access is denied:
+
+```bash
+relayium-server admin --db /var/lib/relayium/relayium.db ip-access list
+relayium-server admin --db /var/lib/relayium/relayium.db ip-access unblock 192.0.2.10
+```
+
+`list` shows denied counts and whether each record is permanently banned;
+`unblock` removes that IP's count/ban. It does not add the IP to the allowlist.
+Run as the database owner, with the existing local-command ownership rules.
+Keep a working server shell while first enabling the policy, verify allowed
+and denied paths from separate clients, and check both IPv4 and IPv6 routes.
+No production values or proxy trust changes are implied by a software upgrade.
+
+
+## Optional browser authorization and retired-path trap
+
+`RELAYIUM_ADMIN_BROWSER_REQUIRED=true` adds a browser-profile authorization
+check after the IP allowlist and before every admin handler, including sign-in,
+passkey enrollment and sensitive-action confirmation. An unknown, expired or
+revoked browser receives 403; it does **not** ban an allowlisted IP or affect
+another authorized browser using that IP. Existing Passkey sessions alone do
+not bypass this gate. Passkey sign-in and confirmation remain mandatory.
+
+Generate an authorization link using the installed server binary, locally as
+the database owner (or build the server from this source first):
+
+```sh
+relayium-server admin --db /path/to/relayium.db \
+  --base-url https://example.com --admin-path /private-console \
+  browsers start --name 'My browser'
+```
+
+The link expires after 15 minutes (`--ttl` accepts 1m–1h), can be used once,
+and is bound to the exact origin and admin path. Its 256-bit secret is in the
+URL fragment, never a query parameter. Open it privately in the browser profile
+you want to authorize. The page removes the fragment from history before a
+same-origin POST; the server only stores hashes of grants and browser tokens.
+Non-terminal output requires explicit `--allow-non-terminal`.
+
+Successful redemption sets an HttpOnly, Secure (on HTTPS), SameSite=Strict
+cookie scoped to the configured admin path. Server-side authorization has no
+automatic expiry: it remains valid until explicitly revoked, including browsers
+bound before this change. The old database expiry column is retained as legacy
+metadata and is no longer an authorization deadline. Only revoked browser rows
+may be reclaimed when adding a browser; old timestamps do not evict a binding.
+
+Browsers impose their own cookie limits. Each authorized visit refreshes the
+same cookie for up to 400 days; an existing 90-day cookie is upgraded on its
+next authorized visit. This does not extend a Passkey login session or bypass
+revocation. A browser can still discard cookies earlier, and an unused cookie
+can expire; server-side permanence cannot prevent either behavior. See the
+[Chrome cookie lifetime limit](https://developer.chrome.com/blog/cookie-max-age-expires).
+
+This is a revocable **browser-profile bearer credential**, not an unclonable
+hardware/browser fingerprint. Copying a profile/cookie can copy its authority;
+clearing cookies, using a different profile, local cookie expiry or revocation
+requires a new authorization link. The IP gate and Passkey still apply independently.
+Manage authorizations locally; there is no HTTP browser-management endpoint:
+
+```sh
+relayium-server admin --db /path/to/relayium.db browsers list
+relayium-server admin --db /path/to/relayium.db browsers revoke BROWSER_ID
+relayium-server admin --db /path/to/relayium.db browsers cancel UNUSED_GRANT_ID
+```
+
+`RELAYIUM_ADMIN_LEGACY_TRAP=true` turns the retired exact `/admin` path and its
+subtree into an admin-access honeypot. It requires a custom admin path and a
+nonempty IP allowlist. Any method reaching it permanently bans that **verified
+client IP from admin access immediately**, even if it is allowlisted. This
+also applies before route normalization, including repeated slashes, encoded
+segments and dot segments resolving to the old entry. Prefix siblings such as
+`/administrator` and the configured randomized path are not the old entry.
+Only explicitly trusted proxies may supply client identity.
+
+Old bookmarks, automated probes and cross-site embedded requests can all
+trigger this deliberate denial-of-service tradeoff; the request alone does
+not prove who initiated it. The block affects the admin console only, not
+public APIs, transfers, the public site or SSH. Recovery remains the local
+`admin ip-access unblock IP` command; adding the IP to the allowlist does not
+clear its ban. Ban storage is bounded and never evicts a permanent ban;
+storage exhaustion/errors refuse the trap request instead of silently
+accepting it. Both switches default off for existing self-hosted installations.
+When embedding the account service, wrap the root mux with
+`svc.AdminLegacyTrapGuard(mux)` before its path-cleaning redirects.
+
+Keep actual admin paths, IPs and authorization links in private server
+configuration. Do not commit them to either repository.
+
+### Refreshing the macOS release recommendation locally
+
+The public signed update feed and the backend's operational policy are separate
+records. A release is not reflected in admin selectors until the deployed
+backend includes its verified `macos_release_catalog.json` entry. Publishing a
+new feed alone does not update the operational policy row.
+
+After deploying the verified catalog, a database owner may explicitly run:
+
+```sh
+relayium-server admin --db /path/to/relayium.db \
+  version-policy refresh-macos --expected-revision CURRENT_REVISION
+```
+
+This local-only maintenance command advances recommendation/latest to the
+highest verified macOS release, refuses downgrades and stale revisions, and
+leaves the fleet minimum and macOS minimum version/build untouched. It reuses
+the policy validator and commits its revision update and CLI audit together;
+audit failure rolls back the update. A no-op creates no revision or audit.
+It grants no browser session, invokes no provider and changes no customer or
+billing data. The HTTP policy form still requires Passkey step-up and auditing.

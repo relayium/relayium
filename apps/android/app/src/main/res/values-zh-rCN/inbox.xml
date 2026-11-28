@@ -132,6 +132,8 @@
     <string name="inbox_action_export">另存一份…</string>
     <string name="inbox_action_share">分享</string>
     <string name="inbox_action_copy">复制</string>
+    <string name="inbox_message_expand">展开文本</string>
+    <string name="inbox_message_collapse">收起文本</string>
     <string name="inbox_delete_title">从历史中删除？</string>
     <string name="inbox_delete_body">这只会从本设备的历史中移除该条目。它不会取消任何投递，不会清空另一台设备，也不会删除你已经保存的文件。</string>
     <string name="inbox_delete_action">删除</string>

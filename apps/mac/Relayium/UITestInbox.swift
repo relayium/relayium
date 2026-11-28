@@ -1,5 +1,6 @@
 #if DEBUG
 import Foundation
+import Combine
 import RelayiumAppKit
 import RelayiumKit
 
@@ -40,8 +41,8 @@ enum UITestInbox {
     static let askArgument = "--relayium-ui-testing-inbox-ask"
     /// Check now, end to end, with no network.
     ///
-    /// The automatic schedule is stretched to an hour so that every pass after
-    /// the first is one the user asked for, and each asked-for pending read is
+    /// Full maintenance is stretched to an hour. Fast foreground probes remain
+    /// active, but only explicit checks advance the script; each such read is
     /// held for a moment so Checking… is a state a person can see. The first
     /// check finds nothing; the second finds one delivery, built and committed
     /// through the same production path as the result fixture.
@@ -161,17 +162,17 @@ enum UITestInbox {
             }
         }
 
-        let transport = UITestInboxTransport(mode: mode)
+        let box = UITestInboxControllerBox()
+        let transport = UITestInboxTransport(mode: mode, isManualCheck: {
+            await MainActor.run { box.controller?.manualCheck == .checking }
+        })
         // nil unless a launch asked for it, so the eight launches that do not
         // mention notifications keep the production defaults: nothing reports a
         // permission, the controller stays `unmeasured`, and the pane renders no
         // banner section at all.
         let banners = (deniesNotifications || recoversNotifications)
             ? UITestBannerPermission(recovers: recoversNotifications) : nil
-        // The seams are part of the runtime the controller is built from, so they
-        // cannot capture the controller directly. The shipped app has the same
-        // ordering problem and resolves it the same way.
-        let box = UITestInboxControllerBox()
+        // The box is populated after the runtime and controller are built.
         let controller = InboxController(runtime: InboxRuntime(
             folder: folder,
             makeEngine: { account, _ in
@@ -213,6 +214,9 @@ enum UITestInbox {
                 ? InboxBackoff(idle: 3600, afterWork: 3600, first: 1, cap: 2, blocked: 3600)
                 : InboxBackoff(idle: 1, afterWork: 1, first: 1, cap: 2, blocked: 1)))
         box.controller = controller
+        box.checkObservation = controller.$manualCheck.removeDuplicates().sink { [weak transport] state in
+            if state == .checking { transport?.beginManualCheck() }
+        }
         return controller
     }
 
@@ -255,7 +259,7 @@ enum UITestInbox {
     }
 }
 
-/// Holds the controller the two notification seams have to reach.
+/// Holds the weak controller and the manual-check observation for this launch.
 ///
 /// The seams are built as part of the runtime the controller is initialised
 /// with, so they cannot capture it. Weak, so the box cannot be what keeps a
@@ -263,6 +267,7 @@ enum UITestInbox {
 @MainActor
 private final class UITestInboxControllerBox {
     weak var controller: InboxController?
+    var checkObservation: AnyCancellable?
 }
 
 /// The platform's answer about banners, and the user's trip to System Settings,
@@ -339,14 +344,20 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
     /// person has to be able to LOOK at, which means the pass has to still be in
     /// it when the assertion runs.
     private var heldStream: BoundedDataStream?
-    /// How many pending reads the check fixture has answered.
-    private var pendingReads = 0
+    /// Only explicit Check now requests advance this fixture's script.
+    private let isManualCheck: @Sendable () async -> Bool
+    private var manualChecks = 0
     /// The ask fixture's answers, by task id: `true` accepted, `false` declined.
     /// An answered task is no longer held for the user, so it leaves `pending`,
     /// and it cannot be answered a second time.
     private var askAnswers: [String: Bool] = [:]
 
-    init(mode: UITestInbox.Mode) { self.mode = mode }
+    init(mode: UITestInbox.Mode, isManualCheck: @escaping @Sendable () async -> Bool) {
+        self.mode = mode
+        self.isManualCheck = isManualCheck
+    }
+
+    func beginManualCheck() { sync { manualChecks += 1 } }
 
     // nonlocalized: acceptance fixture identifiers, never displayed
     private static let deviceID = "dev_this"
@@ -374,7 +385,7 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
     private var offersDelivery: Bool {
         switch mode {
         case .working, .result: return true
-        case .check:            return sync { pendingReads } >= 3
+        case .check:            return sync { manualChecks } >= 2
         case .ready, .attention, .ask: return false
         }
     }
@@ -438,11 +449,10 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
             let answered = sync { askAnswers }
             return Self.askTasks.filter { answered[$0.id] == nil }
         }
-        if mode == .check {
-            let read = sync { () -> Int in pendingReads += 1; return pendingReads }
-            // The first read is the automatic pass at launch; every later one is
-            // a check the user pressed, held long enough to be seen.
-            if read > 1 { try await Task.sleep(nanoseconds: 1_500_000_000) }
+        if mode == .check, await isManualCheck() {
+            // Foreground pending probes remain real, but cannot consume a
+            // scripted manual answer. Hold explicit checks so Checking is visible.
+            try await Task.sleep(nanoseconds: 1_500_000_000)
         }
         guard offersDelivery, !sync({ delivered }) else { return [] }
         return [InboxTask(id: Self.taskID, sourceDeviceID: UITestInbox.senderDeviceID,

@@ -30,8 +30,9 @@
 // which grant an arbitrary-path read channel — and runs the production shared
 // `encryptFiles`. So the ciphertext flows renderer→main and the ONE secret that
 // flows the other way is this job's content key. Main never reads a path, and
-// for a TEXT delivery main never sees the message at all: it is told a byte
-// LENGTH and receives frames.
+// for a TEXT delivery IPC carries a byte LENGTH and ciphertext frames. Main
+// decrypts the accepted text frame into protected local history; no plaintext
+// body is sent to central or written outside the authenticated local store.
 //
 // ## One selection, one content key
 //
@@ -42,16 +43,21 @@
 // than a bug.
 
 import type { AccountContext } from "../inbox/account.js";
-import { AT_REST_KEY_BYTES } from "../inbox/atrest.js";
+import { AT_REST_KEY_BYTES, importAtRestKey, seal, open } from "../inbox/atrest.js";
+import { SecretStore } from "../secrets.js";
+import { UploadKeyCustody } from "../stored/upload/custody.js";
+import { RecoveryStore, type RecoveryPlan } from "../stored/upload/recovery-store.js";
+import { PreparedUploadEngine } from "../stored/upload/prepared-engine.js";
 import { InboxFiles } from "../inbox/files.js";
-import { SendCoordinator, type SendDelivery, type SendOutcome } from "../inbox/send-coordinator.js";
-import { SendPlanStore } from "../inbox/send-plan.js";
+import { SentHistoryStore } from "../inbox/sent-history.js";
+import { SendCoordinator, type SendDelivery, type SendOutcome, type InboxUploadDriver } from "../inbox/send-coordinator.js";
+import { SendPlanStore, type SendPlanRecord } from "../inbox/send-plan.js";
 import { SendTransport, SendApiError } from "../inbox/send-transport.js";
 import { DeviceTaskByteTransport } from "../inbox/send-bytes.js";
 import { buildSendManifest, encodeSendManifest, SendManifestError, type SendKind } from "../inbox/send-manifest.js";
 import { SEND_REFUSALS } from "../inbox/send-wire.js";
 import type { InboxRuntime } from "../inbox/runtime-contract.js";
-import { UploadEngine, type CipherFrame } from "../stored/upload/engine.js";
+import type { CipherFrame } from "../stored/upload/engine.js";
 import { frameLengthAt, planUpload, sealedManifestFits, type UploadPlan } from "../stored/upload/plan.js";
 import { UploadTransport, type UploadByteTransport, type UploadRetention } from "../stored/upload/transport.js";
 import type { AuthorityInput } from "../stored/upload/authority.js";
@@ -59,7 +65,7 @@ import { storedRuntime } from "../stored/runtime.js";
 import type { StoredRuntime } from "../stored/runtime-contract.js";
 import { describeSendOutcome, describeDevice, type InboxSendTargetView, type InboxSendView } from "./inbox-send.js";
 import type { InboxAuthority } from "./inbox.js";
-import type { FrameExpectation, InboxSendStart } from "../../shared/ipc-contract.js";
+import type { FrameExpectation, InboxSendStart, InboxSentHistoryView, InboxSentState, InboxSendRecoveryEntry } from "../../shared/ipc-contract.js";
 
 /**
  * The account identity a send runs under.
@@ -114,6 +120,8 @@ export interface InboxSendDeps {
   onOutcome?(job: { readonly id: string; readonly document: number }, view: InboxSendView): void;
   reportFailure?(err: unknown): void;
   now?(): number;
+  writeClipboard?(text: string): void;
+  confirmRecoveryDiscard?(signal: AbortSignal, mayHaveFinished: boolean): Promise<boolean>;
   /** Test seams. Production takes the defaults. */
   fetchImpl?: typeof fetch;
   readonly requestTimeoutMs?: number;
@@ -260,7 +268,7 @@ class FrameProducer {
   }
 
   /** Drive the engine until the producer is done. The coordinator's `feed`. */
-  async drive(engine: UploadEngine): Promise<void> {
+  async drive(engine: InboxUploadDriver): Promise<void> {
     for (;;) {
       const next = this.waiting.shift();
       if (next === undefined) {
@@ -321,6 +329,8 @@ interface Job {
   cancelling: boolean;
   /** Recorded when the delivery settles, so a late `end` still answers. */
   view: InboxSendView | null;
+  readonly history: SentHistoryStore;
+  textSnapshot: { open(frame: Uint8Array): Promise<string> } | null;
 }
 
 /** The coordinator and everything captured with one account identity. */
@@ -332,6 +342,11 @@ interface Bound {
   readonly transport: SendTransport;
   readonly bearer: string;
   readonly runtime: InboxRuntime;
+  readonly history: SentHistoryStore;
+  readonly recovery: RecoveryStore;
+  readonly custody: UploadKeyCustody;
+  readonly plans: SendPlanStore;
+  readonly stored: StoredRuntime;
 }
 
 export class InboxSendService {
@@ -386,6 +401,15 @@ export class InboxSendService {
   #reservations = 0;
   /** Completion only: bounded by the same admission cap, with no retained keys. */
   readonly #admitting = new Set<Promise<void>>();
+  readonly #historyWrites = new Map<Promise<unknown>, number>();
+  readonly #histories = new Map<string, SentHistoryStore>();
+  readonly #recovering = new Map<string, AbortController>();
+  readonly #recoveryDocuments = new Map<string, number>();
+  readonly #discarding = new Set<string>();
+  readonly #discardingOperations = new Map<string, { readonly document: number; readonly control: AbortController; readonly done: Promise<unknown> }>();
+  readonly #taskCancellations = new Map<string, { readonly document: number; readonly control: AbortController; readonly done: Promise<InboxSendView> }>();
+  #tracking: Promise<boolean> | null = null;
+  readonly #acceptedCleanup = new Map<string, Promise<void>>();
   #fenced = false;
   #disposed = false;
   /** Documents this service has already declared new to the coordinator. */
@@ -415,6 +439,281 @@ export class InboxSendService {
   readonly #converging = new Map<string, Promise<InboxSendView>>();
 
   constructor(private readonly deps: InboxSendDeps) {}
+
+  private ownHistory<T>(work: Promise<T>, epoch: number): Promise<T> {
+    this.#historyWrites.set(work, epoch);
+    void work.then(() => this.#historyWrites.delete(work), () => this.#historyWrites.delete(work));
+    return work;
+  }
+
+  /** Release local upload material only after the exact recipient-key request
+   * and its authenticated task ID are durable. Local history is independent. */
+  private cleanupAccepted(bound: Bound, jobID: string, discovered?: RecoveryPlan | null): Promise<void> {
+    const identity = `${bound.accountKey}:${jobID}`;
+    const held = this.#acceptedCleanup.get(identity); if (held) return held;
+    const work = (async () => {
+      const plan = await bound.plans.find(jobID);
+      if (!plan || !["created", "settled"].includes(plan.phase) || !plan.taskID || !plan.storedObjectID || !plan.wrappedKey) return;
+      const spool = discovered === undefined ? (await bound.recovery.list(bound.accountKey, this.deps.origin)).find((entry) => entry.jobId === jobID) : discovered;
+      if (spool && (spool.phase !== "published" || spool.objectId !== plan.storedObjectID)) throw new Error("inbox-send: cleanup identity mismatch");
+      const history = spool ? (await bound.history.list()).find((entry) => entry.id === jobID) : undefined;
+      if (history?.kind === "text" && history.body === null) {
+        if (!spool || history.bytes > bound.runtime.constants.maxTextBytes) throw new Error("inbox-send: text history not durable");
+        await bound.recovery.verify(spool);
+        const key = await bound.custody.read(jobID, bound.accountKey);
+        const raw = bound.runtime.decodeKey(key.encodedKey);
+        try {
+          const decryptor = bound.runtime.createStoreDecryptor(await bound.runtime.importStoreKey(raw));
+          const chunks: Uint8Array[] = [];
+          for await (const chunk of decryptor.push(await bound.recovery.range(spool, 0, spool.cipherBytes))) chunks.push(chunk);
+          for await (const chunk of decryptor.end(history.bytes)) chunks.push(chunk);
+          await bound.history.update(jobID, { body: new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)) });
+        } finally { raw.fill(0); }
+      }
+      if (spool) await bound.recovery.remove(spool);
+      // Key LAST. A failed purge retains it for cleanup/recovery. A history
+      // tombstone is explicit user intent and is never recreated here.
+      await bound.custody.retire(jobID, "task-key-wrapped");
+    })().finally(() => this.#acceptedCleanup.delete(identity));
+    this.#acceptedCleanup.set(identity, work);
+    return this.ownHistory(work, bound.epoch);
+  }
+
+  private async historyAction<T>(body: (bound: Bound, alive: () => boolean, signal: AbortSignal) => Promise<T>, refused: T, caller?: AbortSignal): Promise<T> {
+    if (this.#disposed || this.#targetsStopped) return refused;
+    const epoch = this.deps.accountEpoch(); const control = new AbortController();
+    const abort = () => control.abort();
+    caller?.addEventListener("abort", abort, { once: true }); if (caller?.aborted) abort();
+    let finish!: () => void; const settled = new Promise<void>((resolve) => { finish = resolve; });
+    const operation = { control, settled }; this.#auxiliary.add(operation);
+    try {
+      const bound = await this.bind();
+      const alive = () => !control.signal.aborted && !this.#disposed && this.#bound === bound && this.deps.accountEpoch() === epoch;
+      if (!bound || !alive()) return refused;
+      const answer = await body(bound, alive, control.signal);
+      return alive() ? answer : refused;
+    } catch (error) { this.deps.reportFailure?.(error); return refused; }
+    finally { caller?.removeEventListener("abort", abort); this.#auxiliary.delete(operation); finish(); }
+  }
+
+  sentHistory(): Promise<readonly InboxSentHistoryView[] | null> {
+    return this.historyAction(async (bound) => (await bound.history.list()).map((entry) => ({ ...entry, body: null,
+      state: entry.state === "preparing" && !this.#jobs.has(entry.id) ? "unconfirmed" as const : entry.state })), null);
+  }
+  historySnapshot(): Promise<{ entries: readonly InboxSentHistoryView[] | null; names?: Readonly<Record<string, string>> }> {
+    return this.historyAction<{ entries: readonly InboxSentHistoryView[] | null; names?: Readonly<Record<string, string>> }>(async (bound) => ({
+      entries: (await bound.history.list()).map((entry) => ({ ...entry, body: null,
+        state: entry.state === "preparing" && !this.#jobs.has(entry.id) ? "unconfirmed" as const : entry.state })),
+      names: await bound.history.peerNames(),
+    }), { entries: null });
+  }
+
+  /** Read-only task tracking. It never retries an upload or creates a task. */
+  refreshTracked(): Promise<boolean> {
+    if (this.#tracking) return this.#tracking;
+    const work = this.historyAction(async (bound, alive, signal) => {
+      const deadline = AbortSignal.any([signal, AbortSignal.timeout(8000)]);
+      const records = await bound.history.list();
+      const plans = await bound.plans.all();
+      const pending = records.filter((entry) => !["saved", "expired", "revoked", "failed_terminal", "cancelled", "refused", "removed"].includes(entry.state))
+        .flatMap((entry) => { const plan = plans.find((plan) => plan.jobID === entry.id && plan.taskID); return plan ? [{ entry, plan }] : []; }).slice(0, 16);
+      for (let index = 0; index < pending.length && alive() && !deadline.aborted; index += 4) {
+        await Promise.all(pending.slice(index, index + 4).map(async ({ entry, plan }) => {
+          try {
+            const task = await bound.transport.task(plan.targetDeviceID, plan.taskID, deadline);
+            if (!alive() || task.SourceDeviceID !== bound.deviceID || task.IdempotencyKey !== plan.idempotencyKey || task.StoredFileID !== plan.storedObjectID) return;
+            const state = historyState(describeSendOutcome({ kind: "delivered", created: false, task }));
+            if (state !== entry.state) await bound.history.update(entry.id, { state });
+          } catch (error) {
+            // Gone is not proof that the recipient saved anything. Preserve
+            // the local content and offer an explicit original-task check.
+            if (alive() && error instanceof SendApiError && error.status === 404 && entry.state !== "removed") {
+              await bound.history.update(entry.id, { state: "removed" });
+            }
+          }
+        }));
+      }
+      return alive();
+    }, false).finally(() => { if (this.#tracking === work) this.#tracking = null; });
+    this.#tracking = work; return work;
+  }
+  openSent(id: string): Promise<{ readonly text: string } | null> {
+    return this.historyAction(async (bound) => {
+      const entry = (await bound.history.list()).find((entry) => entry.id === id);
+      return entry?.body !== null && entry?.body !== undefined ? { text: entry.body } : null;
+    }, null);
+  }
+  copySent(id: string, document: number): Promise<boolean> {
+    return this.historyAction(async (bound, alive) => {
+      const entry = (await bound.history.list()).find((entry) => entry.id === id);
+      if (!alive() || document !== this.deps.currentDocument() || !this.deps.writeClipboard || typeof entry?.body !== "string") return false;
+      this.deps.writeClipboard(entry.body); return true;
+    }, false);
+  }
+  /** Only the IDs captured by the confirmation, never a later whole list. */
+  forgetSent(ids: readonly string[]): Promise<boolean> {
+    const snapshot = [...ids];
+    return this.historyAction(async (bound, alive) => { if (!alive() || this.#fenced) return false; await bound.history.remove(snapshot); return true; }, false);
+  }
+
+  recoveryEntries(): Promise<readonly InboxSendRecoveryEntry[] | null> {
+    return this.historyAction(async (bound) => {
+      // Retry only local cleanup for confirmed tasks; discovery sends no HTTP.
+      const accepted = (await bound.plans.all()).filter((plan) => plan.taskID && ["created", "settled"].includes(plan.phase));
+      const discovered = new Map((await bound.recovery.list(bound.accountKey, this.deps.origin)).map((entry) => [entry.jobId, entry]));
+      // One scan and one cleanup at a time, including a crash between removing
+      // a spool and retiring its key. Do not launch hundreds of disk workers.
+      for (const plan of accepted) {
+        try { await this.cleanupAccepted(bound, plan.jobID, discovered.get(plan.jobID) ?? null); }
+        catch (error) { this.deps.reportFailure?.(error); }
+      }
+      const spools = await bound.recovery.list(bound.accountKey, this.deps.origin);
+      const history = await bound.history.list();
+      const plans = await bound.plans.all(); const entries: InboxSendRecoveryEntry[] = [];
+      for (const plan of plans) {
+        const spool = spools.find((spool) => spool.jobId === plan.jobID);
+        const uncertainTask = !!plan.taskID && history.some((entry) => entry.id === plan.jobID && entry.state === "unconfirmed");
+        const pendingCleanup = !!spool && !!plan.taskID && ["created", "settled"].includes(plan.phase);
+        if (this.#jobs.has(plan.jobID) || !["uploading", "upload-unknown", "uploaded", "creating"].includes(plan.phase) && !(plan.phase === "abandoned" && spool) && !uncertainTask && !pendingCleanup) continue;
+        entries.push({ jobId: plan.jobID, peerID: plan.targetDeviceID,
+          version: await recoveryVersion(plan, spool?.revision ?? 0),
+          phase: plan.phase === "abandoned" || pendingCleanup ? "cleanup" : spool?.phase === "preparing" ? "preparing" : uncertainTask || plan.phase === "creating" || spool?.phase === "finalizing" ? "unconfirmed" : "ready",
+          canResume: plan.phase !== "abandoned" && (!!plan.taskID || plan.phase === "creating" || plan.phase === "uploaded" || !!spool && spool.phase !== "preparing"),
+          canDiscard: !!spool });
+      }
+      return entries;
+    }, null);
+  }
+
+  resumeRecovery(jobID: string, version: string, document = this.deps.currentDocument()): Promise<InboxSendView> {
+    if (document !== this.deps.currentDocument()) return Promise.resolve({ kind: "unknown", reason: "unavailable" });
+    const existing = this.#converging.get(jobID); if (existing) return existing;
+    if (this.#fenced || this.#disposed || document !== this.deps.currentDocument() || this.#jobs.has(jobID) || this.#discarding.has(jobID) || this.#taskCancellations.has(jobID) || this.reserved() + this.#converging.size >= MAX_ACTIVE_INBOX_SENDS) return Promise.resolve({ kind: "unknown", reason: "unavailable" });
+    const control = new AbortController(); this.#recovering.set(jobID, control);
+    this.#recoveryDocuments.set(jobID, document);
+    const work = this.historyAction(async (bound, alive) => {
+      const plan = await bound.plans.find(jobID);
+      const spools = await bound.recovery.list(bound.accountKey, this.deps.origin);
+      const spool = spools.find((spool) => spool.jobId === jobID);
+      if (!alive() || this.#fenced || !plan || version !== await recoveryVersion(plan, spool?.revision ?? 0)) return { kind: "unknown", reason: "stale-recovery" } as const;
+      if (!plan.taskID && !["uploading", "upload-unknown", "uploaded", "creating"].includes(plan.phase)) return { kind: "unknown", reason: "closed-recovery" } as const;
+      if (plan.phase === "uploaded") await bound.custody.read(jobID, bound.accountKey);
+      if (plan.phase === "uploading" || plan.phase === "upload-unknown") {
+        if (!spool || spool.phase === "preparing") return { kind: "unknown", reason: "incomplete-preparation" } as const;
+        const held = await bound.custody.read(jobID, bound.accountKey);
+        const raw = bound.runtime.decodeKey(held.encodedKey);
+        try {
+          const key = await bound.runtime.importStoreKey(raw);
+          const bytes = await bound.runtime.openManifestBytes(key, new Uint8Array(Buffer.from(spool.sealedManifest, "base64")));
+          const manifest = bound.runtime.decodeInboxManifest(bytes);
+          if (await digestOf(bytes) !== plan.manifestDigest || manifest.items.some((item, index) => item.kind !== plan.kind ||
+            item.size !== spool.descriptors[index]?.size || item.kind === "file" && item.name !== spool.descriptors[index]?.path) ||
+            manifest.items.length !== spool.descriptors.length) throw new Error("inbox-send: recovery identity mismatch");
+          await bound.recovery.verify(spool, control.signal);
+        } finally { raw.fill(0); }
+      }
+      if (!alive() || this.#fenced || document !== this.deps.currentDocument()) return { kind: "unknown", reason: "account-changed" } as const;
+      await Promise.allSettled([...this.#retiring]);
+      if (!alive() || this.#fenced || document !== this.deps.currentDocument()) return { kind: "unknown", reason: "account-changed" } as const;
+      const documentId = String(document);
+      if (!this.#adopted.has(documentId)) { bound.coordinator.adoptDocument(documentId); this.#adopted.add(documentId); }
+      bound.coordinator.release(jobID);
+      const authority = { accountId: bound.accountKey, deviceId: bound.deviceID, documentId, origin: this.deps.origin, bearer: bound.bearer };
+      const delivery = plan.taskID || plan.phase === "creating" ? bound.coordinator.resume(jobID, authority) :
+        bound.coordinator.resumePreparedUpload(jobID, authority, plan.manifestDigest, async (fence, onSession) => {
+          const bytes = new DeviceTaskByteTransport(this.innerTransport(bound.bearer), this.deps.origin, bound.bearer,
+            this.deps.fetchImpl === undefined ? {} : { fetchImpl: this.deps.fetchImpl });
+          const engine = await PreparedUploadEngine.recover({ store: bound.recovery, runtime: bound.stored, transport: bytes, fence,
+            hooks: { onSession, onProgress: (committed, total) => { if (fence.valid) this.deps.onProgress?.({ id: jobID, document }, committed, total); } } },
+          bound.accountKey, this.deps.origin, jobID);
+          return engine.end();
+        });
+      const job: Job = { jobID, targetDeviceID: plan.targetDeviceID, document, epoch: bound.epoch,
+        producer: new FrameProducer(), delivery, cipherBytes: spool?.cipherBytes ?? 0, cancelling: false, view: null,
+        history: bound.history, textSnapshot: null };
+      if (this.#unresolvedJobs.delete(jobID)) this.#unresolved = Math.max(0, this.#unresolved - 1);
+      this.#settled.delete(jobID);
+      this.#jobs.set(jobID, job);
+      const outcome = await delivery.done;
+      return this.record(job, describeSendOutcome(outcome));
+    }, { kind: "unknown", reason: "recovery-unavailable" } as InboxSendView, control.signal).finally(() => {
+      this.#converging.delete(jobID); this.#recovering.delete(jobID); this.#recoveryDocuments.delete(jobID);
+    });
+    this.#converging.set(jobID, work); return work;
+  }
+
+  discardRecovery(jobID: string, version: string, document = this.deps.currentDocument()): Promise<"discarded" | "declined" | "refused" | "failed"> {
+    if (this.#fenced || this.#disposed || document !== this.deps.currentDocument() || this.#jobs.has(jobID) || this.#converging.has(jobID) || this.#discarding.has(jobID) || this.#taskCancellations.has(jobID)) return Promise.resolve("refused");
+    this.#discarding.add(jobID);
+    const control = new AbortController();
+    const work = this.historyAction(async (bound, alive, signal) => {
+      const plan = await bound.plans.find(jobID);
+      const spool = (await bound.recovery.list(bound.accountKey, this.deps.origin)).find((entry) => entry.jobId === jobID);
+      if (!alive() || !plan || !spool || version !== await recoveryVersion(plan, spool.revision)) return "refused" as const;
+      const uncertain = spool.phase === "finalizing" || spool.phase === "published" || plan.phase === "creating";
+      if (!await this.deps.confirmRecoveryDiscard?.(signal, uncertain)) return "declined" as const;
+      if (!alive() || this.#fenced || document !== this.deps.currentDocument() || this.#jobs.has(jobID)) return "refused" as const;
+      const latest = await bound.plans.find(jobID);
+      const copy = await bound.recovery.read(bound.accountKey, this.deps.origin, jobID);
+      if (!latest || version !== await recoveryVersion(latest, copy.revision) || !alive()) return "refused" as const;
+      if (latest.taskID && ["created", "settled"].includes(latest.phase)) {
+        await this.cleanupAccepted(bound, jobID, copy);
+        return "discarded" as const;
+      }
+      if (plan.phase !== "creating" && plan.phase !== "abandoned" && !plan.taskID) {
+        if (!["uploading", "upload-unknown", "uploaded"].includes(plan.phase)) return "refused" as const;
+        const documentId = String(document);
+        await Promise.allSettled([...this.#retiring]);
+        if (!alive() || this.#fenced || document !== this.deps.currentDocument()) return "refused" as const;
+        if (!this.#adopted.has(documentId)) { bound.coordinator.adoptDocument(documentId); this.#adopted.add(documentId); }
+        bound.coordinator.release(jobID);
+        const authority = { accountId: bound.accountKey, deviceId: bound.deviceID, documentId, origin: this.deps.origin, bearer: bound.bearer };
+        if (plan.phase === "uploaded") await bound.coordinator.cancel(jobID, authority);
+        else await bound.coordinator.discard(jobID, authority);
+        bound.coordinator.release(jobID);
+      }
+      // No task cancellation for a possibly committed create. Its exact request
+      // and key stay available for a later explicit reconciliation.
+      if (!alive() || plan.phase !== "creating" && !plan.taskID && (await bound.plans.find(jobID))?.phase !== "abandoned") return "refused" as const;
+      await bound.recovery.remove(copy);
+      if (!uncertain && !plan.storedObjectID) await bound.custody.retire(jobID, "server-absent");
+      if (plan.phase !== "creating" && !plan.taskID) {
+        if (this.#unresolvedJobs.delete(jobID)) this.#unresolved = Math.max(0, this.#unresolved - 1);
+        this.wipe(jobID);
+        await bound.history.update(jobID, { state: "refused" });
+      }
+      return "discarded" as const;
+    }, "failed" as "discarded" | "declined" | "refused" | "failed", control.signal).finally(() => {
+      this.#discarding.delete(jobID); this.#discardingOperations.delete(jobID);
+    });
+    this.#discardingOperations.set(jobID, { document, control, done: work }); return work;
+  }
+
+  /** Explicit task cancellation, separate from deleting local history. */
+  cancelDelivery(jobID: string, document = this.deps.currentDocument()): Promise<InboxSendView> {
+    const existing = this.#taskCancellations.get(jobID); if (existing) return existing.done;
+    if (this.#disposed || this.#fenced || document !== this.deps.currentDocument() || this.#jobs.has(jobID) ||
+      this.#converging.has(jobID) || this.#discarding.has(jobID) || this.#taskCancellations.size >= MAX_ACTIVE_INBOX_SENDS) return Promise.resolve({ kind: "unknown", reason: "unavailable" });
+    const control = new AbortController();
+    const done = this.historyAction(async (bound, alive) => {
+      const plan = await bound.plans.find(jobID);
+      await Promise.allSettled([...this.#retiring]);
+      if (!alive() || this.#fenced || document !== this.deps.currentDocument() || !plan?.taskID) return { kind: "unknown", reason: "no-confirmed-task" } as const;
+      const documentId = String(document);
+      if (!this.#adopted.has(documentId)) { bound.coordinator.adoptDocument(documentId); this.#adopted.add(documentId); }
+      bound.coordinator.release(jobID);
+      const result = await bound.coordinator.cancel(jobID, { accountId: bound.accountKey, deviceId: bound.deviceID,
+        documentId, origin: this.deps.origin, bearer: bound.bearer });
+      bound.coordinator.release(jobID);
+      const view = describeSendOutcome(result);
+      if (view.kind !== "refused") await bound.history.update(jobID, { state: historyState(view) });
+      const remembered = this.remembered(jobID);
+      if (remembered && (view.kind === "cancelled" || view.kind === "delivered")) remembered.view = view;
+      return view;
+    }, { kind: "unknown", reason: "cancel-unavailable" } as InboxSendView, control.signal)
+      .finally(() => this.#taskCancellations.delete(jobID));
+    this.#taskCancellations.set(jobID, { document, control, done }); return done;
+  }
 
   private now(): number {
     return this.deps.now?.() ?? Date.now();
@@ -466,7 +765,7 @@ export class InboxSendService {
     // The admission bound uses `reserved()` instead, on purpose: a re-check is
     // not a send and must not refuse one.
     return {
-      active: this.reserved() + this.#converging.size + this.#retiring.size,
+      active: this.reserved() + this.#converging.size + this.#retiring.size + this.#taskCancellations.size,
       unresolved: this.#unresolved,
     };
   }
@@ -501,6 +800,7 @@ export class InboxSendService {
       ...this.#retiring, ...this.#converging.values(), ...this.#admitting,
       ...auxiliary.map((operation) => operation.settled),
     ]);
+    await Promise.allSettled([...this.#historyWrites.keys()]);
     return this.inventory();
   }
 
@@ -523,6 +823,7 @@ export class InboxSendService {
       ...auxiliary.map((operation) => operation.settled),
       ...(this.#building === null ? [] : [this.#building]),
     ]);
+    await Promise.allSettled([...this.#historyWrites.keys()]);
     this.#jobs.clear();
     this.#settled.clear();
     this.#unresolvedJobs.clear();
@@ -541,35 +842,52 @@ export class InboxSendService {
    */
   async onAccountChanged(): Promise<void> {
     // Cold reads own work even before a coordinator exists.
-    for (const operation of this.#auxiliary) operation.control.abort();
+    const auxiliary = [...this.#auxiliary];
+    for (const operation of auxiliary) operation.control.abort();
     const bound = this.#bound;
-    if (bound === null) return;
-    for (const job of this.#jobs.values()) job.producer.stop();
+    if (bound === null) { await Promise.allSettled(auxiliary.map((operation) => operation.settled)); return; }
+    const doomed = [...this.#jobs.values()].filter((job) => job.epoch === bound.epoch);
+    for (const job of doomed) job.producer.stop();
     const identity = this.deps.identity();
-    const quiet = await bound.coordinator.invalidateAccount({
+    const quiet = identity?.epoch !== bound.epoch ? await bound.coordinator.invalidateAuthority() : await bound.coordinator.invalidateAccount({
       accountId: identity?.context.accountKey ?? "signed-out",
       deviceId: identity?.deviceID ?? "signed-out",
     });
     // `quiet: false` is RETAIN AND JOIN, not a disposal. The jobs stay
     // registered so a later teardown can still reach them; only the binding is
     // dropped, because its bearer is no longer the user's.
-    if (identity === null || identity.context.accountKey !== bound.accountKey || identity.deviceID !== bound.deviceID) {
+    if (this.#bound === bound && (identity === null || identity.epoch !== bound.epoch || identity.context.accountKey !== bound.accountKey || identity.deviceID !== bound.deviceID)) {
       this.#bound = null;
       this.#adopted.clear();
     }
     if (!quiet.quiet) this.deps.reportFailure?.(Object.assign(new Error("inbox-send: not quiet"), { code: "busy" }));
-    await this.settleRevoked();
+    await this.settleRevoked(doomed);
+    await Promise.allSettled(auxiliary.map((operation) => operation.settled));
+    await Promise.allSettled([...this.#historyWrites].filter(([, epoch]) => epoch === bound.epoch).map(([work]) => work));
   }
 
   /** A renderer document was destroyed or reloaded. */
   async revokeDocument(generation: number): Promise<void> {
+    const pending: Promise<unknown>[] = [];
+    for (const [jobID, document] of this.#recoveryDocuments) {
+      if (document !== generation) continue;
+      this.#recovering.get(jobID)?.abort();
+      const done = this.#converging.get(jobID); if (done) pending.push(done);
+    }
+    for (const operation of this.#discardingOperations.values()) {
+      if (operation.document !== generation) continue;
+      operation.control.abort(); pending.push(operation.done);
+    }
+    for (const operation of this.#taskCancellations.values()) {
+      if (operation.document !== generation) continue;
+      operation.control.abort(); pending.push(operation.done);
+    }
     const bound = this.#bound;
     const documentId = String(generation);
     this.#adopted.delete(documentId);
-    if (bound === null) return;
-    for (const job of this.#jobs.values()) {
-      if (job.document === generation) job.producer.stop();
-    }
+    if (bound === null) { await Promise.allSettled(pending); return; }
+    const doomed = [...this.#jobs.values()].filter((job) => job.document === generation);
+    for (const job of doomed) job.producer.stop();
     const result = await bound.coordinator.invalidateDocument(documentId);
     // An overflow closes the coordinator PERMANENTLY. Keeping it would re-admit
     // a job under a document id nothing remembers revoking.
@@ -577,13 +895,14 @@ export class InboxSendService {
       this.#bound = null;
       this.#adopted.clear();
     }
-    await this.settleRevoked();
+    await this.settleRevoked(doomed);
+    await Promise.allSettled(pending);
   }
 
   /** Answer every job whose delivery has already stopped. */
-  private async settleRevoked(): Promise<void> {
+  private async settleRevoked(jobs: readonly Job[] = [...this.#jobs.values()]): Promise<void> {
     await Promise.allSettled(
-      [...this.#jobs.values()].map(async (job) => {
+      jobs.map(async (job) => {
         if (job.view !== null) return;
         // `done` never rejects for a delivery outcome, so this is a JOIN and
         // not a race: the coordinator has already classified whatever happened.
@@ -647,6 +966,9 @@ export class InboxSendService {
         const name = typeof row["Name"] === "string" ? row["Name"] : "";
         targets.push(describeDevice(deviceID, name, rowRefusal(inbox, caps)));
       }
+      try { await this.ownHistory(bound.history.rememberPeers(Object.fromEntries(targets.map((target) => [target.deviceID, target.name]))), bound.epoch); }
+      catch (error) { this.deps.reportFailure?.(error); }
+      if (control.signal.aborted || this.#bound !== bound) return { ok: false, refusal: "unavailable" };
       return { ok: true, targets };
     } finally {
       this.#auxiliary.delete(operation);
@@ -792,6 +1114,11 @@ export class InboxSendService {
       const manifestDigest = await digestOf(canonical);
 
       const jobID = randomToken("job");
+      await bound.history.record({ id: jobID, peerID: input.target, kind: input.kind,
+        createdAt: (this.deps.now ?? (() => Math.floor(Date.now() / 1000)))(),
+        bytes: descriptors.reduce((sum, item) => sum + item.size, 0),
+        items: input.kind === "file" ? descriptors.map((item) => ({ name: item.path, size: item.size })) : [],
+        body: null, state: "preparing" });
       const authority: AuthorityInput = {
         accountId: bound.accountKey,
         deviceId: bound.deviceID,
@@ -807,10 +1134,9 @@ export class InboxSendService {
       // every one of those has to be re-checked with nothing awaited in
       // between — and the DOCUMENT most of all, because `adoptDocument` below
       // would otherwise un-revoke an id whose page has just gone away.
-      if (this.#disposed || this.#fenced) return { ok: false, refusal: "unavailable" };
-      if (input.document !== this.deps.currentDocument()) return { ok: false, refusal: "unavailable" };
-      if (this.deps.accountEpoch() !== bound.epoch) return { ok: false, refusal: "unavailable" };
-      if (this.#jobs.size >= MAX_ACTIVE_INBOX_SENDS) return { ok: false, refusal: "at-capacity" };
+      const refusal = this.#disposed || this.#fenced || input.document !== this.deps.currentDocument() || this.deps.accountEpoch() !== bound.epoch
+        ? "unavailable" : this.#jobs.size >= MAX_ACTIVE_INBOX_SENDS ? "at-capacity" : null;
+      if (refusal) { await bound.history.update(jobID, { state: "cancelled" }); return { ok: false, refusal }; }
 
       // A reload gives a document a new id, and the coordinator refuses one it
       // has seen revoked. Declaring it is the host stating that this id names a
@@ -847,6 +1173,14 @@ export class InboxSendService {
         cipherBytes: planned.plan.cipherBytes,
         cancelling: false,
         view: null,
+        history: bound.history,
+        textSnapshot: input.kind === "text" ? { open: async (bytes) => {
+          const decryptor = bound.runtime.createStoreDecryptor(storeKey);
+          const chunks: Uint8Array[] = [];
+          for await (const chunk of decryptor.push(bytes)) chunks.push(chunk);
+          for await (const chunk of decryptor.end(descriptors[0]?.size)) chunks.push(chunk);
+          return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
+        } } : null,
       };
       this.#jobs.set(jobID, job);
       this.#staged.set(jobID, { plan: planned.plan, sealedManifest, storeKey, key: held });
@@ -895,7 +1229,20 @@ export class InboxSendService {
     // what the server has taken: the engine's own `onProgress` carries
     // committed bytes as the server acknowledged them, and publishing a
     // producer-side count beside it would race it backwards.
-    return { expects: await job.producer.feed(frame) };
+    // Snapshot only the validated text frame (the protocol's 64KiB text limit
+    // fits one 192KiB store frame). No key or plaintext is added to IPC.
+    const opener = job.textSnapshot;
+    const snapshot = opener && frame.fileIndex === 0 && frame.seq === 1 ? frame.bytes.slice() : null;
+    const work = (async () => {
+      const expects = await job.producer.feed(frame);
+      if (snapshot && opener) {
+        try { await job.history.update(jobID, { body: await opener.open(snapshot) }); }
+        catch (error) { this.deps.reportFailure?.(error); }
+        finally { job.textSnapshot = null; }
+      }
+      return { expects };
+    })();
+    return this.ownHistory(work, job.epoch);
   }
 
   /** The producer has sent everything. Finalize, create the task, report. */
@@ -919,6 +1266,11 @@ export class InboxSendService {
 
   /** The user pressed Cancel. */
   async cancel(jobID: string): Promise<InboxSendView> {
+    const recovery = this.#recovering.get(jobID);
+    if (recovery) {
+      recovery.abort();
+      if (!this.#jobs.has(jobID)) return await this.#converging.get(jobID) ?? { kind: "unknown", reason: "recovery-stopped" };
+    }
     const job = this.#jobs.get(jobID);
     if (job === undefined) {
       // A settled job is not cancellable, and reporting `cancelled` over a
@@ -1032,6 +1384,7 @@ export class InboxSendService {
         this.#settled.set(jobID, job);
       }
       this.deps.onOutcome?.({ id: jobID, document: job.document }, view);
+      await this.ownHistory(job.history.update(jobID, { state: historyState(view) }), job.epoch);
       return view;
     } catch (err) {
       this.deps.reportFailure?.(err);
@@ -1064,6 +1417,12 @@ export class InboxSendService {
       this.#unresolved = Math.max(0, this.#unresolved - 1);
     }
     job.view = view;
+    const bound = this.#bound;
+    if (view.kind === "delivered" && bound?.epoch === job.epoch) {
+      void this.cleanupAccepted(bound, job.jobID).catch((error) => this.deps.reportFailure?.(error));
+    }
+    job.textSnapshot = null;
+    void this.ownHistory(job.history.update(job.jobID, { state: historyState(view) }), job.epoch).catch((error) => this.deps.reportFailure?.(error));
     job.producer.stop();
     this.#jobs.delete(job.jobID);
     if (view.kind === "unknown") {
@@ -1182,6 +1541,7 @@ export class InboxSendService {
     if (this.#disposed) return null;
     const keyBytes = await this.deps.atRestKeyFor(identity.context);
     if (this.#disposed || keyBytes.byteLength !== AT_REST_KEY_BYTES) return null;
+    const localKey = await importAtRestKey(keyBytes);
     // Re-checked after every await: a sign-out during any of them would leave
     // this building a coordinator around a bearer that is no longer the user's.
     if (this.deps.accountEpoch() !== authority.epoch) return null;
@@ -1189,6 +1549,21 @@ export class InboxSendService {
     if (current === null || current.context.accountKey !== identity.context.accountKey) return null;
 
     const files = new InboxFiles(identity.context);
+    // The account's DPAPI-protected Inbox key authenticates these small key
+    // slots. Spool bodies contain ciphertext only. No raw key or user text is
+    // written to a plaintext plan or handed to a network diagnostic.
+    const secrets = new SecretStore(`${identity.context.directory}/send-keys`, {
+      isAvailable: () => true,
+      encrypt: async (text) => Buffer.from(await seal(localKey, identity.context.accountKey, "inbox-upload-key", new TextEncoder().encode(text))),
+      decrypt: async (bytes) => new TextDecoder("utf-8", { fatal: true }).decode(await open(localKey, identity.context.accountKey, "inbox-upload-key", new Uint8Array(bytes))),
+    });
+    const custody = new UploadKeyCustody(secrets);
+    const recovery = new RecoveryStore(`${identity.context.directory}/send-upload`, secrets);
+    let history = this.#histories.get(identity.context.accountKey);
+    if (!history) {
+      history = new SentHistoryStore(identity.context, files, () => this.deps.atRestKeyFor(identity.context));
+      this.#histories.set(identity.context.accountKey, history);
+    }
     const plans = new SendPlanStore(
       identity.context,
       files,
@@ -1228,13 +1603,11 @@ export class InboxSendService {
       engineFor: async (jobID, bytes, fence, onSession) => {
         const held = this.#staged.get(jobID);
         if (held === undefined) throw new Error("inbox-send: no staged upload for this job");
-        return UploadEngine.open({
-          runtime: stored,
-          key: held.storeKey,
-          sealedManifest: held.sealedManifest,
-          plan: held.plan,
-          retention,
-          transport: bytes,
+        if (!(bytes instanceof DeviceTaskByteTransport)) throw new Error("inbox-send: invalid byte adapter");
+        await custody.hold(jobID, { accountId: identity.context.accountKey, encodedKey: runtime.encodeKey(held.key) });
+        fence.assert();
+        return PreparedUploadEngine.create({
+          runtime: stored, store: recovery, transport: bytes,
           fence,
           hooks: {
             onSession,
@@ -1243,11 +1616,18 @@ export class InboxSendService {
               if (job !== undefined) this.deps.onProgress?.({ id: jobID, document: job.document }, committed, total);
             },
           },
-        });
+        }, { accountId: identity.context.accountKey, origin: this.deps.origin, jobId: jobID,
+          createdAt: this.now(), descriptors: held.plan.manifest.map((file) => ({ path: file.name, size: file.size })),
+          sealedManifest: Buffer.from(held.sealedManifest).toString("base64"), cipherBytes: held.plan.cipherBytes, retention });
       },
       sealToTarget: async (jobID, target) => {
         const held = this.#staged.get(jobID);
-        if (held === undefined) throw new Error("inbox-send: no content key for this job");
+        if (held === undefined) {
+          const stored = await custody.read(jobID, identity.context.accountKey);
+          const raw = runtime.decodeKey(stored.encodedKey);
+          try { return await runtime.sealContentKey(raw, target.key.algorithm, target.key.publicKey); }
+          finally { raw.fill(0); }
+        }
         // Sealed to the target's CURRENT key, read immediately before this by
         // the coordinator. The renderer never holds a target's public key: a
         // page that did could seal to it.
@@ -1263,6 +1643,11 @@ export class InboxSendService {
       transport,
       bearer: authority.bearer,
       runtime,
+      history,
+      recovery,
+      custody,
+      plans,
+      stored,
     };
     this.#bound = bound;
     return bound;
@@ -1316,6 +1701,20 @@ function rowRefusal(
 function randomToken(prefix: string): string {
   const raw = crypto.getRandomValues(new Uint8Array(16));
   return `${prefix}-${Buffer.from(raw).toString("hex")}`;
+}
+
+function historyState(view: InboxSendView): InboxSentState {
+  switch (view.kind) {
+    case "delivered": return view.state;
+    case "cancelled": return "cancelled";
+    case "unknown": return "unconfirmed";
+    case "refused": return view.reason === "no-task" ? "removed" : "refused";
+  }
+}
+
+function recoveryVersion(plan: SendPlanRecord, revision: number): Promise<string> {
+  return digestOf(new TextEncoder().encode(JSON.stringify([plan.jobID, plan.phase, plan.updatedAt,
+    plan.uploadID, plan.storedObjectID, plan.taskID, revision])));
 }
 
 /** SHA-256 of the canonical manifest bytes, as hex. */

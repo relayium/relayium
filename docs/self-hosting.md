@@ -71,6 +71,9 @@ definitions in [`server/main.go`](../server/main.go). The essentials:
 | `RELAYIUM_TURN_URLS` / `RELAYIUM_TURN_SECRET` | Optional TURN relay for transfers where a direct P2P connection isn't possible (see [Cross-network transfers](#cross-network-transfers) below). With the bundled `relay` profile the secret must be set in **two** places — see that section; setting only one of them leaves TURN silently off. |
 | `RELAYIUM_REDIS_ADDR` | **Disabled; leave unset.** It used to start a coturn→Redis relay-byte ingest, but that ingest keyed usage by coturn's session id, which restarts from zero on every coturn restart, so it could bill one account for another's traffic. Setting it now starts nothing and only logs a warning at startup; coturn relay traffic is not metered until a re-keyed ingest replaces it. Transfers work either way. |
 | `RELAYIUM_ADMIN_ENABLED` | `true` turns on the `/admin` console; off (the default) makes `/admin` 404 and fall through to the SPA. Sign-in is **Passkey-only** and passkeys are managed with the local `relayium-server admin` command — see [Admin dashboard](#admin-dashboard-optional-and-not-read-only) and [admin-passkeys.md](admin-passkeys.md). It is a full mutating console, not a read-only viewer. |
+| `RELAYIUM_ADMIN_PATH` | Console path, default `/admin`. Deployment-only setting shared with the local admin command; custom values replace the old path. See [admin access policy](admin-passkeys.md#deployment-only-path-and-ip-access-policy). |
+| `RELAYIUM_ADMIN_ALLOWED_IPS` | Optional comma-separated exact client IPs. Nonempty restricts every admin endpoint; nonallowlisted requests are denied immediately and the fourth permanently bans admin access for that IP. Empty disables this policy. |
+| `RELAYIUM_ADMIN_TRUSTED_PROXIES` | Explicit trusted proxy IPs/CIDRs for the admin policy. Empty ignores forwarded headers. Validate the actual proxy chain before enabling. |
 | `RELAYIUM_ADMIN_USER` | Display name / audit actor for the admin (defaults to `admin`). Not a credential. |
 | `RELAYIUM_ADMIN_PASS` / `RELAYIUM_ADMIN_TOTP_SECRET` | **Deprecated, never used to sign in.** While `RELAYIUM_ADMIN_ENABLED` is unset, a non-empty legacy password only acts as the "on" switch (with a startup warning) so older host configs keep the console enabled; the TOTP secret is ignored. Remove both. |
 | `RELAYIUM_RELEASE_CHECK` | On (`true`) by default: ask GitHub hourly for the newest release and offer it in `/admin`. See [Release check](#release-check-on-by-default) below. `false` disables it — no request is made at all. |
@@ -517,3 +520,25 @@ curl -sS https://example.com/healthz     # → ok
 Then open the page on two devices and send a file. On the same LAN it should
 just work; across networks, use the pairing-code / QR flow (requires the
 sender to sign in).
+
+
+### Additional admin browser gate
+
+After configuring a private admin path and IP policy, optionally enable
+`RELAYIUM_ADMIN_BROWSER_REQUIRED=true`. Issue a one-time link with the server's
+local `admin browsers start --name NAME` command, then open it in the intended
+browser profile. Unknown browsers receive 403 without banning other browsers
+on the same IP; IP admission and Passkey sign-in remain required. The browser
+server authorization remains valid until explicitly revoked locally. Its browser
+cookie refreshes for up to 400 days on each authorized visit, subject to the
+browser's own retention limits; clearing or losing the cookie requires binding
+again. Existing bindings remain authorized and their cookies refresh on the next
+visit.
+
+`RELAYIUM_ADMIN_LEGACY_TRAP=true` additionally makes visits to the retired
+`/admin` entry immediately and permanently ban that verified client IP from
+admin access, including allowlisted IPs. It requires a custom path plus an IP
+allowlist; old bookmarks and cross-site requests can trigger it. Both options
+default off. Read the authorization, revocation and local-unblock recovery
+steps in [the admin runbook](admin-passkeys.md#optional-browser-authorization-and-retired-path-trap)
+before enabling them. Actual paths/IPs/one-time links stay private on the server.

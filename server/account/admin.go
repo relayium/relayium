@@ -339,7 +339,7 @@ func planViews(plans []Plan) []planView {
 }
 
 // adminListHref builds a /admin/users list link, keeping only non-default params, URL-encoded.
-func adminListHref(search, sort, dir, period string, page int) string {
+func adminListHref(search, sort, dir, period string, page int, paths ...string) string {
 	v := url.Values{}
 	if search != "" {
 		v.Set("q", search)
@@ -357,9 +357,9 @@ func adminListHref(search, sort, dir, period string, page int) string {
 		v.Set("page", strconv.Itoa(page))
 	}
 	if len(v) == 0 {
-		return "/admin/users"
+		return optionalAdminPath(paths) + "/users"
 	}
-	return "/admin/users?" + v.Encode()
+	return optionalAdminPath(paths) + "/users?" + v.Encode()
 }
 
 // adminPageLink is one numbered page link in a pager.
@@ -388,7 +388,7 @@ const (
 // adminByoHref builds a /admin/fleet link that sets the BYO search (bq) and one
 // BYO pager while preserving only the other BYO pager. User-list state belongs
 // to /admin/users and must not leak into fleet URLs.
-func adminByoHref(base url.Values, search, pageKey string, page int) string {
+func adminByoHref(base url.Values, search, pageKey string, page int, paths ...string) string {
 	v := url.Values{}
 	for k, vals := range base {
 		if k == byoSearchParam || k == pageKey || (k != byoPageParam && k != byoRemPageParam) {
@@ -403,15 +403,15 @@ func adminByoHref(base url.Values, search, pageKey string, page int) string {
 		v.Set(pageKey, strconv.Itoa(page))
 	}
 	if len(v) == 0 {
-		return "/admin/fleet"
+		return optionalAdminPath(paths) + "/fleet"
 	}
-	return "/admin/fleet?" + v.Encode()
+	return optionalAdminPath(paths) + "/fleet?" + v.Encode()
 }
 
 // adminByoClearHref drops the BYO search and both page numbers. Fleet and user
 // state live on different routes, so there is nothing else to preserve.
-func adminByoClearHref(_ url.Values) string {
-	return "/admin/fleet"
+func adminByoClearHref(_ url.Values, paths ...string) string {
+	return optionalAdminPath(paths) + "/fleet"
 }
 
 // adminByoPageParam reads a 1-based page number out of the query string,
@@ -454,7 +454,7 @@ func (s *Service) listByoPage(r *http.Request, q AdminByoNodeQuery, page, size i
 
 // byoPageLinks renders the numbered links around the current page of one BYO
 // section (pageKey selects which).
-func byoPageLinks(base url.Values, search, pageKey string, page, totalPages int) []adminPageLink {
+func byoPageLinks(base url.Values, search, pageKey string, page, totalPages int, paths ...string) []adminPageLink {
 	from, to := page-adminByoPageWindow, page+adminByoPageWindow
 	if from < 1 {
 		from = 1
@@ -464,7 +464,7 @@ func byoPageLinks(base url.Values, search, pageKey string, page, totalPages int)
 	}
 	out := make([]adminPageLink, 0, to-from+1)
 	for p := from; p <= to; p++ {
-		out = append(out, adminPageLink{Num: p, Href: adminByoHref(base, search, pageKey, p), Current: p == page})
+		out = append(out, adminPageLink{Num: p, Href: adminByoHref(base, search, pageKey, p, paths...), Current: p == page})
 	}
 	return out
 }
@@ -504,69 +504,85 @@ func (s *Service) adminUser() string {
 }
 
 // RegisterAdmin 在根 mux 上挂载 /admin 路由（仅当 AdminEnabled）。
-func (s *Service) RegisterAdmin(mux *http.ServeMux) {
+func (s *Service) RegisterAdmin(root *http.ServeMux) {
 	if !s.AdminEnabled() {
 		return
+	}
+	mux := http.NewServeMux()
+	guarded := s.adminAccessGuard(s.adminBrowserGuard(mux))
+	root.Handle(s.AdminPath(), guarded)
+	root.Handle(s.AdminPath()+"/", guarded)
+	if s.AdminPath() != DefaultAdminPath {
+		var legacy http.Handler = http.NotFoundHandler()
+		if s.cfg.AdminLegacyTrap {
+			legacy = s.adminLegacyTrap()
+		}
+		root.Handle(DefaultAdminPath, legacy)
+		root.Handle(DefaultAdminPath+"/", legacy)
 	}
 	// State-changing admin form posts go through the same Origin-based CSRF
 	// guard as the API. The admin panel is server-rendered same-origin HTML, so
 	// legitimate submissions carry a matching Origin; a cross-site forgery does
 	// not. GET /admin (the login/dashboard page) is a safe method, left alone.
-	mux.HandleFunc("GET /admin", s.handleAdminHome)
-	mux.HandleFunc("GET /admin/users", s.handleAdminUsers)
-	mux.HandleFunc("GET /admin/fleet", s.handleAdminFleet)
+	if s.cfg.AdminBrowserRequired {
+		mux.HandleFunc("GET "+s.AdminPath()+adminBrowserAuthorizePath, s.handleAdminBrowserAuthorizePage)
+		mux.Handle("POST "+s.AdminPath()+adminBrowserAuthorizePath, s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminBrowserAuthorize))))
+	}
+	mux.HandleFunc("GET "+s.AdminPath(), s.handleAdminHome)
+	mux.HandleFunc("GET "+s.AdminPath()+"/users", s.handleAdminUsers)
+	mux.HandleFunc("GET "+s.AdminPath()+"/fleet", s.handleAdminFleet)
 	// Read-only: no CSRFGuard (GET is a safe method, same as GET /admin
 	// above) and NOT wrapped in RequireStepUp (that guard is for writes —
 	// this handler never mutates anything).
-	mux.HandleFunc("GET /admin/audit", s.handleAdminAudit)
-	mux.HandleFunc("GET /admin/version-policy", s.handleAdminVersionPolicy)
+	mux.HandleFunc("GET "+s.AdminPath()+"/audit", s.handleAdminAudit)
+	mux.HandleFunc("GET "+s.AdminPath()+"/version-policy", s.handleAdminVersionPolicy)
 	// Password/TOTP login is gone. The route stays, answering 410 without
 	// reading the form, so an old bookmark or script gets a clear refusal
 	// instead of falling through to the SPA — and so no future handler can be
 	// mounted here by accident.
-	mux.Handle("POST /admin/login", http.HandlerFunc(s.handleAdminRemovedEndpoint))
-	mux.Handle("POST /admin/logout", s.CSRFGuard(http.HandlerFunc(s.handleAdminLogout)))
+	mux.Handle("POST "+s.AdminPath()+"/login", http.HandlerFunc(s.handleAdminRemovedEndpoint))
+	mux.Handle("POST "+s.AdminPath()+"/logout", s.CSRFGuard(http.HandlerFunc(s.handleAdminLogout)))
 	// A display preference, but still a state change, so it goes through the same
 	// CSRF guard as every other POST here rather than being a convenient link.
-	mux.Handle("POST /admin/lang", s.CSRFGuard(http.HandlerFunc(s.handleAdminLang)))
+	mux.Handle("POST "+s.AdminPath()+"/lang", s.CSRFGuard(http.HandlerFunc(s.handleAdminLang)))
 	// The passkey endpoints are fetch-only, so a missing Origin (which CSRFGuard
 	// lets through for form posts and native clients) is a forgery signal here.
-	mux.Handle("POST /admin/passkey/login/begin",
+	mux.Handle("POST "+s.AdminPath()+"/passkey/login/begin",
 		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.HandleAdminPasskeyLoginBegin))))
-	mux.Handle("POST /admin/passkey/login/finish",
+	mux.Handle("POST "+s.AdminPath()+"/passkey/login/finish",
 		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.HandleAdminPasskeyLoginFinish))))
 	// The browser can no longer add or remove an admin passkey, even from a
 	// logged-in session: credential management is the local
 	// `relayium-server admin` command. The three old routes answer 410 and do
 	// nothing; the handlers behind them are inert (passkey_register.go).
-	mux.Handle("POST /admin/passkey/register/begin", http.HandlerFunc(s.handleAdminRemovedEndpoint))
-	mux.Handle("POST /admin/passkey/register/finish", http.HandlerFunc(s.handleAdminRemovedEndpoint))
-	mux.Handle("POST /admin/passkey/delete", http.HandlerFunc(s.handleAdminRemovedEndpoint))
+	mux.Handle("POST "+s.AdminPath()+"/passkey/register/begin", http.HandlerFunc(s.handleAdminRemovedEndpoint))
+	mux.Handle("POST "+s.AdminPath()+"/passkey/register/finish", http.HandlerFunc(s.handleAdminRemovedEndpoint))
+	mux.Handle("POST "+s.AdminPath()+"/passkey/delete", http.HandlerFunc(s.handleAdminRemovedEndpoint))
 	// Enrollment of a NEW passkey, authorized by a one-time grant the local
 	// command printed (admin_enroll.go). It needs no admin session — that is
 	// the point: it works with zero registered passkeys — and it can only ever
 	// produce a PENDING credential that the same local command must approve.
-	mux.HandleFunc("GET /admin/enroll", s.handleAdminEnrollPage)
-	mux.Handle("POST /admin/enroll/begin",
+	mux.HandleFunc("GET "+s.AdminPath()+"/enroll", s.handleAdminEnrollPage)
+	mux.Handle("POST "+s.AdminPath()+"/enroll/begin",
 		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminEnrollBegin))))
-	mux.Handle("POST /admin/enroll/finish",
+	mux.Handle("POST "+s.AdminPath()+"/enroll/finish",
 		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminEnrollFinish))))
 	// Step-up passkey assertion challenge, issued to the confirmation page.
 	// fetch-only like the other passkey endpoints, so a missing Origin is a
 	// forgery signal.
-	mux.Handle("POST /admin/stepup/passkey/begin",
+	mux.Handle("POST "+s.AdminPath()+"/stepup/passkey/begin",
 		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.HandleAdminStepUpPasskeyBegin))))
 	// These six are high-risk writes: RequireStepUp intercepts the POST,
 	// stashes it as a pending action, and renders a confirmation page
 	// showing the diff instead of applying it directly. The actual write
 	// only happens via POST /admin/confirm (HandleAdminConfirm) below.
-	mux.Handle("POST /admin/settings",
+	mux.Handle("POST "+s.AdminPath()+"/settings",
 		s.CSRFGuard(s.RequireStepUp(AuditSettings, s.handleAdminSettings)))
-	mux.Handle("POST /admin/version-policy",
+	mux.Handle("POST "+s.AdminPath()+"/version-policy",
 		s.CSRFGuard(s.RequireStepUp(AuditVersionPolicy, s.handleAdminUpdateVersionPolicy)))
-	mux.Handle("POST /admin/plans",
+	mux.Handle("POST "+s.AdminPath()+"/plans",
 		s.CSRFGuard(s.RequireStepUp(AuditPlanUpsert, s.handleAdminUpsertPlan)))
-	mux.Handle("POST /admin/users/plan",
+	mux.Handle("POST "+s.AdminPath()+"/users/plan",
 		s.CSRFGuard(s.RequireStepUp(AuditUserPlan, s.handleAdminSetUserPlan)))
 	// The time-bounded membership grant. Same guard pair as the permanent
 	// assignment above, and a separate route rather than an extra field on it:
@@ -574,18 +590,18 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// projection and is refused on a payment-bound account, the other overlays it
 	// and is allowed there), so they must not share a form an operator could send
 	// half of.
-	mux.Handle("POST /admin/users/grant",
+	mux.Handle("POST "+s.AdminPath()+"/users/grant",
 		s.CSRFGuard(s.RequireStepUp(AuditUserPlanGrant, s.handleAdminGrantUserPlan)))
-	mux.Handle("POST /admin/nodes/token",
+	mux.Handle("POST "+s.AdminPath()+"/nodes/token",
 		s.CSRFGuard(s.RequireStepUp(AuditTokenMint, s.handleAdminMintToken)))
-	mux.Handle("POST /admin/nodes/{id}/delete",
+	mux.Handle("POST "+s.AdminPath()+"/nodes/{id}/delete",
 		s.CSRFGuard(s.RequireStepUp(AuditNodeDelete, s.handleAdminDeleteNode)))
 	// The App Store product catalog: which App Store product grants which tier.
 	// High-risk for a reason none of the others share — a wrong row here is read
 	// AFTER a customer's money has already moved, so the cost of a mis-click is
 	// not a rejected edit but a paid purchase resolving to the wrong tier or to
 	// nothing. Same guard pair as the writes above; see admin_apple_products.go.
-	mux.Handle("POST /admin/apple-products",
+	mux.Handle("POST "+s.AdminPath()+"/apple-products",
 		s.CSRFGuard(s.RequireStepUp(AuditAppleProduct, s.handleAdminUpsertAppleProduct)))
 	// The global App Store new-purchase gate — the emergency brake that stops
 	// ALREADY-SHIPPED builds starting a purchase, without touching a single
@@ -595,19 +611,19 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// called for. See billing_apple_pause.go, and note what it deliberately does
 	// not reach — the transaction intake, which must keep accepting purchases
 	// Apple has already charged for.
-	mux.Handle("POST /admin/apple-purchases",
+	mux.Handle("POST "+s.AdminPath()+"/apple-purchases",
 		s.CSRFGuard(s.RequireStepUp(AuditApplePurchases, s.handleAdminApplePurchases)))
-	mux.Handle("POST /admin/confirm", s.CSRFGuard(http.HandlerFunc(s.HandleAdminConfirm)))
+	mux.Handle("POST "+s.AdminPath()+"/confirm", s.CSRFGuard(http.HandlerFunc(s.HandleAdminConfirm)))
 	// Low-risk writes (no lockout/destructive-at-scale potential) apply
 	// directly — no confirmation page.
-	mux.Handle("POST /admin/nodes/token/{id}/revoke", s.CSRFGuard(http.HandlerFunc(s.handleAdminRevokeToken)))
-	mux.Handle("POST /admin/nodes/{id}/limits", s.CSRFGuard(http.HandlerFunc(s.handleAdminNodeLimits)))
-	mux.Handle("POST /admin/nodes/{id}/label", s.CSRFGuard(http.HandlerFunc(s.handleAdminNodeLabel)))
-	mux.Handle("POST /admin/nodes/{id}/draining", s.CSRFGuard(http.HandlerFunc(s.handleAdminNodeDraining)))
+	mux.Handle("POST "+s.AdminPath()+"/nodes/token/{id}/revoke", s.CSRFGuard(http.HandlerFunc(s.handleAdminRevokeToken)))
+	mux.Handle("POST "+s.AdminPath()+"/nodes/{id}/limits", s.CSRFGuard(http.HandlerFunc(s.handleAdminNodeLimits)))
+	mux.Handle("POST "+s.AdminPath()+"/nodes/{id}/label", s.CSRFGuard(http.HandlerFunc(s.handleAdminNodeLabel)))
+	mux.Handle("POST "+s.AdminPath()+"/nodes/{id}/draining", s.CSRFGuard(http.HandlerFunc(s.handleAdminNodeDraining)))
 	// Restore is the inverse of /api/nodes/deregister and the reason that endpoint
 	// is no longer a one-way door. Same CSRF guard as its neighbours; no step-up,
 	// because it returns a node to service rather than taking one out.
-	mux.Handle("POST /admin/nodes/{id}/restore", s.CSRFGuard(http.HandlerFunc(s.handleAdminRestoreNode)))
+	mux.Handle("POST "+s.AdminPath()+"/nodes/{id}/restore", s.CSRFGuard(http.HandlerFunc(s.handleAdminRestoreNode)))
 	// The other half of the same door: for when deregistration never happened at
 	// all (central was unreachable when the uninstaller ran best-effort, and by
 	// the time anyone notices state.json — and with it the token and node id —
@@ -618,7 +634,7 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// Same CSRF guard as restore, no step-up: it is the admin-console mirror of
 	// an action a node can already take on itself with nothing but a bearer
 	// token, not a new capability.
-	mux.Handle("POST /admin/nodes/{id}/remove", s.CSRFGuard(http.HandlerFunc(s.handleAdminMarkNodeRemoved)))
+	mux.Handle("POST "+s.AdminPath()+"/nodes/{id}/remove", s.CSRFGuard(http.HandlerFunc(s.handleAdminMarkNodeRemoved)))
 	// 节点版本发布控制。**每条轨道一套独立路由**（track 在 path 里），不是一个
 	// 带轨道下拉框的表单：机队轨和自带节点轨是两台各自独立的控制器，任何把它们
 	// 合并成一个入口的做法都会把一条轨道的故障传染给另一条 —— 而"BYO 卡住时机队
@@ -627,22 +643,22 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// 通配符叫 {id} 而不是 {track}：RequireStepUp / putPending 只搬运名为 "id"
 	// 的通配符，紧急发布要经过确认页往返，所以它必须叫 id；四个直接生效的动作
 	// 也用同一个名字，免得同一组 handler 里两种读法。
-	mux.Handle("POST /admin/rollout/{id}/target", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutTarget)))
-	mux.Handle("POST /admin/rollout/{id}/rollback", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutRollback)))
+	mux.Handle("POST "+s.AdminPath()+"/rollout/{id}/target", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutTarget)))
+	mux.Handle("POST "+s.AdminPath()+"/rollout/{id}/rollback", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutRollback)))
 	// BYO-only, and deliberately NOT on the {id} wildcard: this is the one
 	// action that changes a target without consulting the byo-behind-fleet
 	// gate, and the fleet track has no business reaching it.
-	mux.Handle("POST /admin/rollout/byo/rollback-previous", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutByoRollbackPrevious)))
-	mux.Handle("POST /admin/rollout/{id}/pause", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutPause)))
-	mux.Handle("POST /admin/rollout/{id}/resume", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutResume)))
+	mux.Handle("POST "+s.AdminPath()+"/rollout/byo/rollback-previous", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutByoRollbackPrevious)))
+	mux.Handle("POST "+s.AdminPath()+"/rollout/{id}/pause", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutPause)))
+	mux.Handle("POST "+s.AdminPath()+"/rollout/{id}/resume", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutResume)))
 	// 单台重试：只对「已完成但这台没更新」的节点开放，不改目标版本。它走
 	// {id} 通配而不是写死 fleet —— 面板模板两条轨道共用，写死会让 byo 面板
 	// 渲染出一个必然 404 的按钮。两道守卫都在 handler 里复查。
-	mux.Handle("POST /admin/rollout/{id}/retry", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutRetry)))
+	mux.Handle("POST "+s.AdminPath()+"/rollout/{id}/retry", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutRetry)))
 	// 紧急发布跳过分批、对整条轨道一次性放行 —— 没有金丝雀能再兜住这次发布了，
 	// 所以它和删除节点一样走 RequireStepUp：确认页展示 diff、校验 passkey、
 	// 由 HandleAdminConfirm 落审计。
-	mux.Handle("POST /admin/rollout/{id}/emergency",
+	mux.Handle("POST "+s.AdminPath()+"/rollout/{id}/emergency",
 		s.CSRFGuard(s.RequireStepUp(AuditRolloutEmergency, s.handleAdminRolloutEmergency)))
 	// 手动快速发布：立刻开始一轮机队发布，去掉 canary 观察窗与节点间的等待，
 	// 但**保留其余全部**——仍是一次一台、每台仍要自己下载校验安装重启并通过
@@ -654,7 +670,7 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// "快一点"从来不是把它们批量推更新的理由。让这条路由根本不存在，比在
 	// handler 里判一次更难绕过（Service.StartManualFastFleetRollout 也不收
 	// track 参数）。
-	mux.Handle("POST /admin/rollout/fleet/fast",
+	mux.Handle("POST "+s.AdminPath()+"/rollout/fleet/fast",
 		s.CSRFGuard(s.RequireStepUp(AuditRolloutFast, s.handleAdminRolloutFast)))
 	// 安全快速发布：同样立刻开始一轮机队发布，但**第一台完整保留 6 小时观察窗**，
 	// 而且必须明确回报成功、且真的在跑目标版本；只有首台过关之后，后面的节点才
@@ -666,7 +682,7 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// 就是为了让"跳没跳观察窗"这件事事后一眼可查，也让安全的那条更好按。
 	//
 	// 同样把 fleet 写死在路径里，理由和上面一样：用户自己的机器没有这条路。
-	mux.Handle("POST /admin/rollout/fleet/fast-canary",
+	mux.Handle("POST "+s.AdminPath()+"/rollout/fleet/fast-canary",
 		s.CSRFGuard(s.RequireStepUp(AuditRolloutFastCanary, s.handleAdminRolloutFastCanary)))
 	// 新版本通知：一键把机队轨指向 GitHub 上最新的 release，或忽略这个版本。
 	// 底层调用的是与手动填版本号相同的 SetTargetVersion（见
@@ -675,8 +691,8 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// 额外的 step-up：该 handler 自带的两道校验（轨道未在发布中 + 提交版本
 	// 与服务器当前检测到的最新版本一致）已经排除了误操作/过期页面的风险，
 	// stepup 的机制回答的是这两道校验已经回答过的问题。
-	mux.Handle("POST /admin/release/rollout", s.CSRFGuard(http.HandlerFunc(s.handleAdminReleaseRollout)))
-	mux.Handle("POST /admin/release/dismiss", s.CSRFGuard(http.HandlerFunc(s.handleAdminReleaseDismiss)))
+	mux.Handle("POST "+s.AdminPath()+"/release/rollout", s.CSRFGuard(http.HandlerFunc(s.handleAdminReleaseRollout)))
+	mux.Handle("POST "+s.AdminPath()+"/release/dismiss", s.CSRFGuard(http.HandlerFunc(s.handleAdminReleaseDismiss)))
 }
 
 // newAdminSession mints a session token for a successful passkey login and
@@ -791,17 +807,17 @@ func (s *Service) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 		_ = s.Store().DeleteAdminSession(r.Context(), c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name: adminCookie, Value: "", Path: "/admin", MaxAge: -1,
+		Name: adminCookie, Value: "", Path: s.AdminPath(), MaxAge: -1,
 		HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
 	})
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath(), http.StatusFound)
 }
 
 // buildAdminHomeData loads only the data owned by the requested route. The old
 // console loaded users, fleet, billing catalog, settings and security state for
 // every page view; route ownership keeps those query costs independent.
 func (s *Service) buildAdminHomeData(r *http.Request, section string) (adminHomeData, error) {
-	data := adminHomeData{Section: section, Lang: adminLangFrom(r), Nonce: CSPNonce(r)}
+	data := adminHomeData{adminRouteData: s.adminRouteData(), Section: section, Lang: adminLangFrom(r), Nonce: CSPNonce(r)}
 	switch section {
 	case adminSectionOverview:
 		return s.buildAdminOverviewData(r, data)
@@ -925,13 +941,13 @@ func (s *Service) buildAdminUsersData(r *http.Request, data adminHomeData) (admi
 		if sortBy == col && dir == "desc" {
 			nextDir = "asc"
 		}
-		sortHref[col] = adminListHref(search, col, nextDir, period, 1)
+		sortHref[col] = adminListHref(search, col, nextDir, period, 1, s.AdminPath())
 	}
 	if page > 1 {
-		data.PrevHref = adminListHref(search, sortBy, dir, period, page-1)
+		data.PrevHref = adminListHref(search, sortBy, dir, period, page-1, s.AdminPath())
 	}
 	if page < totalPages {
-		data.NextHref = adminListHref(search, sortBy, dir, period, page+1)
+		data.NextHref = adminListHref(search, sortBy, dir, period, page+1, s.AdminPath())
 	}
 	var plans, activePlans, grantablePlans []planView
 	if rows, err := s.Store().ListPlans(r.Context()); err != nil {
@@ -1022,20 +1038,20 @@ func (s *Service) buildAdminFleetData(r *http.Request, data adminHomeData) (admi
 	data.ByoPage, data.ByoTotalPages = page, totalPages
 	data.ByoRemovedPage, data.ByoRemovedTotalPages = removedPage, removedTotalPages
 	if page > 1 {
-		data.ByoPrevHref = adminByoHref(q, search, byoPageParam, page-1)
+		data.ByoPrevHref = adminByoHref(q, search, byoPageParam, page-1, s.AdminPath())
 	}
 	if page < totalPages {
-		data.ByoNextHref = adminByoHref(q, search, byoPageParam, page+1)
+		data.ByoNextHref = adminByoHref(q, search, byoPageParam, page+1, s.AdminPath())
 	}
 	if removedPage > 1 {
-		data.ByoRemovedPrevHref = adminByoHref(q, search, byoRemPageParam, removedPage-1)
+		data.ByoRemovedPrevHref = adminByoHref(q, search, byoRemPageParam, removedPage-1, s.AdminPath())
 	}
 	if removedPage < removedTotalPages {
-		data.ByoRemovedNextHref = adminByoHref(q, search, byoRemPageParam, removedPage+1)
+		data.ByoRemovedNextHref = adminByoHref(q, search, byoRemPageParam, removedPage+1, s.AdminPath())
 	}
-	data.ByoPages = byoPageLinks(q, search, byoPageParam, page, totalPages)
-	data.ByoRemovedPages = byoPageLinks(q, search, byoRemPageParam, removedPage, removedTotalPages)
-	data.ByoClearHref, data.ByoErr, data.ByoRemovedErr = adminByoClearHref(q), byoErr != nil, removedErr != nil
+	data.ByoPages = byoPageLinks(q, search, byoPageParam, page, totalPages, s.AdminPath())
+	data.ByoRemovedPages = byoPageLinks(q, search, byoRemPageParam, removedPage, removedTotalPages, s.AdminPath())
+	data.ByoClearHref, data.ByoErr, data.ByoRemovedErr = adminByoClearHref(q, s.AdminPath()), byoErr != nil, removedErr != nil
 	if retired, total, err := s.Store().ListRetiredNodes(r.Context(), adminRetiredNodesShown); err != nil {
 		// Unknown is rendered as a failure, never as "no retired nodes".
 		log.Printf("admin: ListRetiredNodes failed: %v", err)
@@ -1102,7 +1118,7 @@ func (s *Service) handleAdminFleet(w http.ResponseWriter, r *http.Request) {
 func (s *Service) renderAdminSection(w http.ResponseWriter, r *http.Request, section string) {
 	if !s.isAdminReq(r) {
 		if section != adminSectionOverview {
-			http.Redirect(w, r, "/admin", http.StatusFound)
+			http.Redirect(w, r, s.AdminPath(), http.StatusFound)
 			return
 		}
 		s.renderAdminLogin(w, r, http.StatusOK, "", s.AdminPasskeyCount(r.Context()) > 0)
@@ -1121,7 +1137,7 @@ func (s *Service) renderAdminSection(w http.ResponseWriter, r *http.Request, sec
 // adminAuditHref builds a /admin/audit list link, keeping only non-default
 // params — mirrors adminListHref's approach for the user list above, so the
 // same "no cookie leaves the URL to the last search" property applies here.
-func adminAuditHref(action string, page int) string {
+func adminAuditHref(action string, page int, paths ...string) string {
 	v := url.Values{}
 	if action != "" {
 		v.Set("action", action)
@@ -1130,9 +1146,9 @@ func adminAuditHref(action string, page int) string {
 		v.Set("page", strconv.Itoa(page))
 	}
 	if len(v) == 0 {
-		return "/admin/audit"
+		return optionalAdminPath(paths) + "/audit"
 	}
-	return "/admin/audit?" + v.Encode()
+	return optionalAdminPath(paths) + "/audit?" + v.Encode()
 }
 
 // handleAdminAudit renders the read-only audit log page. It is the only new
@@ -1142,7 +1158,7 @@ func adminAuditHref(action string, page int) string {
 // unauthenticated request must never see a single audit row.
 func (s *Service) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
-		http.Redirect(w, r, "/admin", http.StatusFound)
+		http.Redirect(w, r, s.AdminPath(), http.StatusFound)
 		return
 	}
 	q := r.URL.Query()
@@ -1171,15 +1187,15 @@ func (s *Service) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
 	}
 	prev, next := "", ""
 	if page > 1 {
-		prev = adminAuditHref(action, page-1)
+		prev = adminAuditHref(action, page-1, s.AdminPath())
 	}
 	// A full page doesn't guarantee a next page exists, but a short page
 	// guarantees it doesn't — same "good enough" heuristic adminListHref's
 	// caller uses via TotalPages elsewhere, without a second COUNT query here.
 	if len(entries) == auditPageSize {
-		next = adminAuditHref(action, page+1)
+		next = adminAuditHref(action, page+1, s.AdminPath())
 	}
-	data := adminAuditData{
+	data := adminAuditData{adminRouteData: s.adminRouteData(),
 		Lang: adminLangFrom(r),
 		Rows: rows, Actions: auditActions, Action: action, Page: page,
 		PrevHref: prev, NextHref: next,
@@ -1254,7 +1270,7 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminUpsertPlan validates a plan-edit form and upserts the plan,
@@ -1302,7 +1318,7 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/admin/users", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/users", http.StatusFound)
 }
 
 // handleAdminSetUserPlan assigns a user to a billing plan. Only ACTIVE plans
@@ -1352,7 +1368,7 @@ func (s *Service) handleAdminSetUserPlan(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/admin/users", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/users", http.StatusFound)
 }
 
 // handleAdminGrantUserPlan records a TIME-BOUNDED administrator membership
@@ -1431,7 +1447,7 @@ func (s *Service) handleAdminGrantUserPlan(w http.ResponseWriter, r *http.Reques
 		}
 		return
 	}
-	http.Redirect(w, r, "/admin/users", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/users", http.StatusFound)
 }
 
 // handleAdminMintToken mints an admin fleet-node token, stores its hash, and
@@ -1499,7 +1515,7 @@ func (s *Service) handleAdminNodeLimits(w http.ResponseWriter, r *http.Request) 
 		{Field: "traffic_limit_bytes", Old: before.TrafficLimitBytes, New: trafficBytes},
 		{Field: "disk_limit_bytes", Old: before.DiskLimitBytes, New: diskBytes},
 	}, StepUpNone)
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminNodeLabel renames an official (fleet) node.
@@ -1524,7 +1540,7 @@ func (s *Service) handleAdminNodeLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	s.WriteAudit(r, AuditNodeLabel, "node:"+id,
 		[]ChangeField{{Field: "label", Old: before.Label, New: label}}, StepUpNone)
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminNodeDraining is the operator toggle for the first half of a safe
@@ -1550,7 +1566,7 @@ func (s *Service) handleAdminNodeDraining(w http.ResponseWriter, r *http.Request
 	}
 	s.WriteAudit(r, AuditNodeDraining, "node:"+id,
 		[]ChangeField{{Field: "draining", Old: before.Draining, New: on}}, StepUpNone)
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminRestoreNode undoes a deregistration: it clears removed_at and puts
@@ -1590,7 +1606,7 @@ func (s *Service) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request)
 	}
 	s.WriteAudit(r, AuditNodeRestore, "node:"+id,
 		[]ChangeField{{Field: "removed_at", Old: before.RemovedAt, New: int64(0)}}, StepUpNone)
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminMarkNodeRemoved is the manual recovery for a lost deregistration:
@@ -1630,7 +1646,7 @@ func (s *Service) handleAdminMarkNodeRemoved(w http.ResponseWriter, r *http.Requ
 	}
 	s.WriteAudit(r, AuditNodeRemove, "node:"+id,
 		[]ChangeField{{Field: "removed_at", Old: before.RemovedAt, New: at}}, StepUpNone)
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminDeleteNode deletes an official (fleet) node.
@@ -1660,7 +1676,7 @@ func (s *Service) handleAdminDeleteNode(w http.ResponseWriter, r *http.Request) 
 		}
 		return
 	}
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminRevokeToken revokes an admin-minted fleet token so it can no longer
@@ -1679,7 +1695,7 @@ func (s *Service) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request)
 	// 只记 token id，绝不记明文 —— 明文只在铸造时内联显示一次，库里存的是哈希。
 	s.WriteAudit(r, AuditTokenRevoke, "token:"+id,
 		[]ChangeField{{Field: "revoked_at", Old: int64(0), New: revokedAt}}, StepUpNone)
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // renderAdminLogin draws the login page: a passkey button and nothing else.
@@ -1689,7 +1705,7 @@ func (s *Service) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request)
 func (s *Service) renderAdminLogin(w http.ResponseWriter, r *http.Request, status int, errMsg string, passkey bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	_ = adminLoginTmpl.Execute(w, adminLoginData{
+	_ = adminLoginTmpl.Execute(w, adminLoginData{adminRouteData: s.adminRouteData(),
 		Lang: adminLangFrom(r), Error: errMsg, Passkey: passkey, Nonce: CSPNonce(r),
 	})
 }

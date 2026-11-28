@@ -4,6 +4,7 @@
   import { detectPlatform, type Platform } from "./platform";
   import releases from "../../native-releases.json";
   import androidRelease from "../../android-release.json";
+  import windowsRelease from "../../windows-release.json";
 
   type MacRelease = { available: boolean; downloadUrl: string | null; architectures?: string[] };
   // The SAME canonical document `gen-pages` publishes as
@@ -16,19 +17,9 @@
     versionCode?: number;
     downloadUrl?: string;
   };
-  // The ids this page can render. All three of `ios`, `android` and `windows`
-  // were removed on 2026-08-28, when `apps/` contained no Android or Windows
-  // target at all and iOS development was paused with no public listing — three
-  // of the six cards advertised products a reader could not get. The
-  // in-development group and every path that feeds it stayed (see
-  // `futureCards`), so the next platform that really shipped would be one entry
-  // rather than a rebuild; this is that entry.
-  //
-  // `android` returned on 2026-09-08, and only because there is now a real APK
-  // to hand a reader: `apps/android/` builds a signed direct-APK preview that
-  // the manifest below points at. `ios` and `windows` stay absent — nothing in
-  // this repository publishes either.
-  type AppId = "web" | "cli" | "mac" | "android";
+  // A published preview is offered only when its manifest carries verified bytes.
+  type WindowsRelease = { available: boolean; version?: string; downloadUrl?: string; sha256?: string | null; size?: number | null };
+  type AppId = "web" | "cli" | "mac" | "android" | "windows";
   type AppCard = {
     id: AppId;
     name: string;
@@ -45,14 +36,20 @@
   let {
     macRelease = releases.macos,
     androidRel = androidRelease.android as AndroidRelease,
+    windowsRel = windowsRelease.windows as WindowsRelease,
     platformOverride,
   }: {
     macRelease?: MacRelease;
     androidRel?: AndroidRelease;
+    windowsRel?: WindowsRelease;
     platformOverride?: Platform;
   } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
+  const windowsCopy = $derived(t.appsPage.cards.windows ?? messages.en.appsPage.cards.windows!);
+  const windowsAvailable = $derived(windowsRel.available === true && !!windowsRel.version
+    && !!windowsRel.downloadUrl && /^[a-f0-9]{64}$/.test(windowsRel.sha256 ?? "")
+    && Number.isSafeInteger(windowsRel.size) && (windowsRel.size ?? 0) > 0);
   const installCmd = "curl -fsSL https://relayium.com/install.sh | sh";
 
   // Detect once per component instance. Browser builds use the real navigator;
@@ -87,7 +84,8 @@
   const highlightIds = $derived<Set<AppId>>(
     new Set<AppId>(
       platform === "mac" ? ["mac"]
-      : platform === "windows" || platform === "linux" ? ["cli"]
+      : platform === "windows" ? (windowsAvailable ? ["windows"] : ["cli"])
+      : platform === "linux" ? ["cli"]
       // An Android visitor is pointed at the Android card ONLY while the
       // manifest really offers a download. With `available:false` — before the
       // first release, or after one is withdrawn — the honest answer is still
@@ -143,6 +141,10 @@
       href: androidAvailable ? androidRel.downloadUrl! : undefined,
       cta: androidAvailable ? t.appsPage.cards.android.cta(androidRel.versionName!) : undefined,
     },
+    ...(windowsAvailable ? [{
+      id: "windows" as const, name: windowsCopy.name, desc: windowsCopy.desc,
+      available: true, href: windowsRel.downloadUrl!, cta: windowsCopy.cta(windowsRel.version!),
+    }] : []),
   ]);
   const availableCards = $derived(
     (() => {
@@ -161,6 +163,9 @@
       // is being offered an APK should not have to hunt for it. While the
       // manifest offers no download the Android card is not in this list at
       // all, and the highlight stays on the web card, which is what serves them.
+      if (platform === "windows" && windowsAvailable) {
+        return [...available.filter((card) => card.id === "windows"), ...available.filter((card) => card.id !== "windows")];
+      }
       if (platform !== "android" || !androidAvailable) return available;
       const android = available.filter((card) => card.id === "android");
       return [...android, ...available.filter((card) => card.id !== "android")];
@@ -205,6 +210,10 @@
                    burying the download behind a four-item list is what put its
                    button 1928px down the page. -->
               <p class="req">{t.appsPage.cards.android.requirements}</p>
+            {/if}
+            {#if card.id === "windows"}
+              <p class="req">{windowsCopy.requirements}</p>
+              <p class="cli-install">{windowsCopy.installNote}</p>
             {/if}
             {#if card.id === "mac" && macAppleSiliconOnly && t.appsPage.cards.mac.requirements}
               <p class="req" data-apps="mac-requirements">{t.appsPage.cards.mac.requirements}</p>

@@ -57,7 +57,7 @@ Recovery depends on an intact staged package and key; server recovery records
 last about one hour. It adds no power-loss durability or measured WAN speed
 guarantee. The full hosted Swift suite (5,522 tests) passed with six existing conditional skips;
 Mac UI and cross-platform interoperability checks passed on the exact source.
-Go build prerequisites are `1.26.10` and account race tests use 12 complete shards
+Go build prerequisites are `1.26.11` and account race tests use 12 complete shards
 under the original 20-minute package ceiling. Earlier failed CI cohorts are
 retained; a later passing Android cohort does not prove the prior timeout cause.
 

@@ -166,7 +166,7 @@ export const cli = {
       },
       {
         title: "sync",
-        desc: "A machine you manage. One-way incremental folder mirroring to a Relayium listener: files whose size and modification time are unchanged are skipped. The files it does transfer are verified, and a partial file left at the destination by an interrupted run is continued by the next run rather than started over. --delete also removes files gone from the source, but only if the listener was started with --allow-delete — otherwise the delete is ignored and reported, and nothing is removed; --watch keeps it running with debouncing and backoff. A one-way mirror is a copy of the current state, not a versioned backup.",
+        desc: "A machine you manage. Use a one-way incremental mirror directly over relayium://. Current receivers compare size and SHA-256. Use --checksum to require content comparison on the receiver. sync resumes across runs: it skips matching files and can reuse verified prefixes. An interrupted file without a verified prefix starts again. Use --check to test the connection without sending file data and --exclude to apply your own filters. With the current CLI, one command automatically splits large selections into batches of up to 100,000 regular files and a 32 MiB directory index each. Use both current endpoints for receiver checkpoints on files of at least 1 MiB. Restart the same sync to reuse a matching checkpoint. Keep serve running without --once for multiple batches. Multi-batch sync refuses --delete. --watch provides ongoing synchronization. A mirror keeps the current state only. With the current CLI on both ends and serve running without --once, ordinary sync reconnects up to eight times after a temporary interruption and shows receiver verification progress. A sync with --delete disables reconnect within an attempt.",
       },
     ],
   },
@@ -175,11 +175,11 @@ export const cli = {
     items: [
       {
         title: "Verification is per-mode, not a blanket promise",
-        body: "push, pair, send and receive verify every transferred file by SHA-256. sync verifies the files it transfers, but decides what to transfer from size and modification time. Cloud and Device Inbox verify on the receiving side before anything is written, and Device Inbox reports saved only once the file is durably on disk. The SAS that pair, send, receive and text print authenticates the endpoints only if someone actually compares it out of band.",
+        body: "push, pair, send and receive verify every transferred file by SHA-256. Current receivers compare size and SHA-256. Use --checksum to require content comparison on the receiver. Cloud and Device Inbox verify on the receiving side before anything is written, and Device Inbox reports saved only once the file is durably on disk. The SAS that pair, send, receive and text print authenticates the endpoints only if someone actually compares it out of band.",
       },
       {
         title: "Resume means three different things, and none covers every mode",
-        body: "sync resumes across runs: it keeps a partial file at the destination and continues it on the next run, and a serve listener receiving a sync honours that. relayium down resumes within a single run: it reconnects a dropped or stalled download by itself, up to five attempts, and continues by HTTP Range from the last complete encrypted frame; against a server that ignores Range it restarts the file inside that same run, and once the attempts are spent it deletes the partial output rather than leaving a truncated file — so a fresh relayium down starts from the beginning. relayium up resumes only when started with --resumable on a current CLI: relayium up --resume <operation> continues that same upload from its private local encrypted copy, even in a new process. push does not resume: it refuses a destination that already exists before any bytes are sent, so there is never a partial file to continue from, and --no-resume is accepted there only for compatibility. A copy or a mirror is also not a versioned backup — sync --delete propagates a deletion at the source, and nothing here keeps an earlier version of a file you overwrote.",
+        body: "sync resumes across runs: it skips matching files and can reuse verified prefixes. An interrupted file without a verified prefix starts again. relayium down resumes within a single run: it reconnects a dropped or stalled download by itself, up to five attempts, and continues by HTTP Range from the last complete encrypted frame; against a server that ignores Range it restarts the file inside that same run, and once the attempts are spent it deletes the partial output rather than leaving a truncated file — so a fresh relayium down starts from the beginning. relayium up resumes only when started with --resumable on a current CLI: relayium up --resume <operation> continues that same upload from its private local encrypted copy, even in a new process. push does not resume: it refuses a destination that already exists before any bytes are sent, so there is never a partial file to continue from, and --no-resume is accepted there only for compatibility. A copy or a mirror is also not a versioned backup — sync --delete propagates a deletion at the source, and nothing here keeps an earlier version of a file you overwrote.",
       },
       {
         title: "Logging in grants no filesystem access",
@@ -200,11 +200,11 @@ export const cli = {
       },
       {
         q: "Which transfers can resume?",
-        a: "Three, and they resume in different senses. sync resumes across runs: it skips files whose size and modification time are unchanged, keeps a partial file at the destination and continues it on the next run; a serve listener receiving a sync honours that. relayium down resumes within a single run: it reconnects a dropped or stalled download on its own, up to five attempts, continuing by HTTP Range from the last complete encrypted frame, and deletes the partial output after the last failed attempt — so running it again starts from the beginning. relayium up resumes only if you chose --resumable before it started, on a current CLI: relayium up --resume <operation> continues the same upload session from its private local encrypted copy, for the same account and server, even after the process exited, and relayium up --discard <operation> removes only that local state. push does not resume: it refuses a destination that already exists before any bytes are sent, and --no-resume is accepted there only for compatibility.",
+        a: "Three, and they resume in different senses. sync resumes across runs: it skips matching files and can reuse verified prefixes. An interrupted file without a verified prefix starts again. relayium down resumes within a single run: it reconnects a dropped or stalled download on its own, up to five attempts, continuing by HTTP Range from the last complete encrypted frame, and deletes the partial output after the last failed attempt — so running it again starts from the beginning. relayium up resumes only if you chose --resumable before it started, on a current CLI: relayium up --resume <operation> continues the same upload session from its private local encrypted copy, for the same account and server, even after the process exited, and relayium up --discard <operation> removes only that local state. push does not resume: it refuses a destination that already exists before any bytes are sent, and --no-resume is accepted there only for compatibility.",
       },
       {
         q: "How does verification differ by mode?",
-        a: "push, pair, send and receive verify every transferred file by SHA-256. pair, send and receive additionally print a 6-digit SAS derived from the keys the two ends exchanged, which proves something only if someone compares it out of band — --verify stops for that. text has the same optional SAS and no files to verify. sync verifies the files it transfers, but decides what to transfer from size and modification time. Cloud and Device Inbox verify on the receiving side before writing.",
+        a: "push, pair, send and receive verify every transferred file by SHA-256. pair, send and receive additionally print a 6-digit SAS derived from the keys the two ends exchanged, which proves something only if someone compares it out of band — --verify stops for that. text has the same optional SAS and no files to verify. Current receivers compare size and SHA-256. Use --checksum to require content comparison on the receiver. Cloud and Device Inbox verify on the receiving side before writing.",
       },
       {
         q: "Which platforms does it run on?",
@@ -259,8 +259,8 @@ export const deviceInbox = {
         desc: "The Mac app is published: install it from the Apps page, sign in to the same account, choose a receive folder and set Receiving to Ask every time or Automatic. It receives while it is running, including with its window closed, and Open at Login brings it back after you log in again. It is not a system daemon — quit it and it stops receiving, which is what the launchd command-line receiver below is for on a Mac you run unattended or administer over SSH.",
       },
       {
-        title: "Windows — no native app",
-        desc: "Relayium publishes no Windows app: no tray receiver, no Windows service and no startup entry, and none is offered. What is verified today is the command-line receiver in the foreground: it receives while the terminal window stays open and ends when you close it. For a receiver that survives a logout and a reboot, use the Linux server deployment above.",
+        title: "Windows — unsigned desktop preview",
+        desc: "Get the unsigned Windows x64 desktop preview from the Apps page, sign in inside the app, select a receive folder and enable Receiving. Keep Relayium running; Quit or signing out of Windows stops receiving. The command-line receiver remains a foreground alternative. This is not a Windows system service.",
       },
       {
         title: "iPhone — no native app",
@@ -310,7 +310,7 @@ export const deviceInbox = {
       },
       {
         q: "Which platforms can receive today?",
-        a: "Linux servers, through the published installer and a low-privilege systemd system service, and Linux desktops through the CLI and a systemd --user service. macOS can receive in the published Mac app, or through the same command-line receiver under launchd on a Mac you run unattended. Windows can run the receiver in the foreground only. iPhone and Android are senders here: Relayium publishes no app for either, and none is offered.",
+        a: "Linux servers, through the published installer and a low-privilege systemd system service, and Linux desktops through the CLI and a systemd --user service. macOS can receive in the published Mac app, or through the same command-line receiver under launchd on a Mac you run unattended. Windows has an unsigned desktop preview that receives while Relayium is running in your signed-in session, plus a foreground CLI receiver. Android has a foreground preview receiver. iPhone uses the browser to send; there is no public iPhone app.",
       },
       {
         q: "Can Relayium read my files or their names?",

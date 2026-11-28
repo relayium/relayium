@@ -1,0 +1,99 @@
+# One finite, operator-dispatched transport for the first unsigned Windows preview.
+# Stages an already accepted artifact into an existing DRAFT; never publishes.
+name: windows-preview-upload
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-preview-upload-${{ github.run_id }}
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.repository == 'relayium/relayium' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Verify the accepted source and artifact identity
+        run: |
+          set -euo pipefail
+          gh api repos/relayium/relayium/actions/runs/45187515974 > run.json
+          gh api repos/relayium/relayium/actions/artifacts/14823878459 > artifact.json
+          python3 - <<'PY'
+          import json
+          source = '189c037f2ad7d23e0d76354babb7f84da84d4ea3'
+          r = json.load(open('run.json'))
+          assert r['id'] == 45187515974 and r['head_sha'] == source
+          assert r['event'] == 'push' and r['head_branch'] == 'main'
+          assert r['status'] == 'completed' and r['conclusion'] == 'success' and r['run_attempt'] == 1
+          assert r['path'] == '.github/workflows/windows.yml'
+          a = json.load(open('artifact.json'))
+          assert a['id'] == 14823878459 and a['name'] == 'relayium-windows-unsigned' and not a['expired']
+          assert a['workflow_run']['id'] == r['id'] and a['workflow_run']['head_sha'] == source
+          assert a['size_in_bytes'] == 118191007
+          assert a['digest'] == 'sha256:491d780781ebf1c2091897280167d5ad131b4e638d892fc08a1fb367796d3cdf'
+          print('Accepted original Windows run and exact immutable artifact')
+          PY
+      - name: Verify every archive and installer byte
+        run: |
+          set -euo pipefail
+          gh api repos/relayium/relayium/actions/artifacts/14823878459/zip > artifact.zip
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, zipfile
+          archive = Path('artifact.zip')
+          assert archive.stat().st_size == 118191007
+          assert hashlib.sha256(archive.read_bytes()).hexdigest() == '491d780781ebf1c2091897280167d5ad131b4e638d892fc08a1fb367796d3cdf'
+          digest = '1c6d037fadf54e00787da34844d91c5ea165f4cfab7b1e3b48d9042e66d3e872'
+          with zipfile.ZipFile(archive) as z:
+              assert z.namelist() == ['Relayium Setup 0.0.4.exe', 'SHA256SUMS.txt']
+              assert z.testzip() is None
+              assert z.read('SHA256SUMS.txt').decode('ascii').splitlines() == [digest.upper() + '  Relayium Setup 0.0.4.exe', 'unsigned: no signing credential configured']
+              body = z.read('Relayium Setup 0.0.4.exe')
+          assert len(body) == 118192076 and hashlib.sha256(body).hexdigest() == digest
+          Path('Relayium-0.0.4-x64.exe').write_bytes(body)
+          print('Full ZIP digest, CRC, closed entry set and full installer SHA-256 verified')
+          PY
+      - name: Refuse any other release or unexpected existing asset
+        run: |
+          set -euo pipefail
+          gh api repos/relayium/relayium/releases/455519142 > before.json
+          python3 - <<'PY'
+          import json
+          r = json.load(open('before.json'))
+          assert r['id'] == 455519142 and r['draft'] and r['prerelease']
+          assert r['tag_name'] == 'windows-v0.0.4' and r['target_commitish'] == '189c037f2ad7d23e0d76354babb7f84da84d4ea3'
+          assert len(r['assets']) == 1
+          a = r['assets'][0]
+          assert a['name'] == 'SHA256SUMS.txt' and a['state'] == 'uploaded' and a['size'] == 89
+          assert a['digest'] == 'sha256:5d56afc2dd3efa9ab3a18a8004fd35c5700c7accdd93908b9f9aa8dc79ff483f'
+          print('Exact draft and existing checksum verified; no replacement or deletion allowed')
+          PY
+      - name: Upload the verified installer into that draft
+        run: |
+          set -euo pipefail
+          gh release upload windows-v0.0.4 Relayium-0.0.4-x64.exe --repo relayium/relayium
+          gh api repos/relayium/relayium/releases/455519142 > after.json
+          python3 - <<'PY'
+          import json
+          r = json.load(open('after.json'))
+          assert r['id'] == 455519142 and r['draft'] and r['prerelease']
+          assert r['tag_name'] == 'windows-v0.0.4' and r['target_commitish'] == '189c037f2ad7d23e0d76354babb7f84da84d4ea3'
+          assert {a['name'] for a in r['assets']} == {'Relayium-0.0.4-x64.exe', 'SHA256SUMS.txt'} and len(r['assets']) == 2
+          for a in r['assets']:
+              assert a['state'] == 'uploaded'
+              if a['name'].endswith('.exe'):
+                  assert a['size'] == 118192076 and a['digest'] == 'sha256:1c6d037fadf54e00787da34844d91c5ea165f4cfab7b1e3b48d9042e66d3e872'
+              else:
+                  assert a['size'] == 89 and a['digest'] == 'sha256:5d56afc2dd3efa9ab3a18a8004fd35c5700c7accdd93908b9f9aa8dc79ff483f'
+          print('DRAFT_STAGED_VERIFIED: exact original installer; release remains private')
+          PY

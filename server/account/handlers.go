@@ -82,7 +82,7 @@ func (s *Service) CSRFGuard(next http.Handler) http.Handler {
 		// origin (or a user-typed navigation, "none") is refused. A client that
 		// sends neither header is not a browser and carries no ambient cookie
 		// risk, so it is left to the admin session check as before.
-		if isAdminPath(r.URL.Path) {
+		if s.isAdminPath(r.URL.Path) {
 			if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
 				http.Error(w, "cross-site request rejected", http.StatusForbidden)
 				return
@@ -92,7 +92,9 @@ func (s *Service) CSRFGuard(next http.Handler) http.Handler {
 	})
 }
 
-func isAdminPath(p string) bool { return p == "/admin" || strings.HasPrefix(p, "/admin/") }
+func (s *Service) isAdminPath(p string) bool {
+	return p == s.AdminPath() || strings.HasPrefix(p, s.AdminPath()+"/")
+}
 
 func (s *Service) routeMux() *http.ServeMux {
 	mux := http.NewServeMux()
@@ -605,14 +607,7 @@ func emailBudgetKey(email string) string { return "email-budget|" + email }
 // owner always holds a live link while their own request is being skipped
 // (shipped TTLs: magic link 15 min = the lockout window, reset 1 h, verify 24 h).
 func (s *Service) allowEmailSend(t *loginThrottle, email string, r *http.Request) bool {
-	now := s.now()
-	sourceKey, budgetKey := email+"|"+s.rateLimitIP(r), emailBudgetKey(email)
-	if t.locked(sourceKey, now) || t.locked(budgetKey, now) {
-		return false
-	}
-	t.recordFail(sourceKey, now)
-	t.recordFail(budgetKey, now)
-	return true
+	return t.reserveEmail(email+"|"+s.rateLimitIP(r), emailBudgetKey(email), s.now(), 0)
 }
 
 // handleMagicVerifyRedirect 只把邮件里的链接转成 SPA 路由，**不碰令牌**。
@@ -1122,6 +1117,9 @@ func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	if !s.allowPasswordAttempt(w, r) {
+		return
+	}
 	// Throttle brute force per email+IP. Keying on both (not email alone) still
 	// caps a single source's guessing while denying an attacker the ability to
 	// lock a victim out of their own account from unrelated IPs.
@@ -1238,7 +1236,7 @@ func (s *Service) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = httpx.DecodeJSONBody(w, r, &in)
 	email := normEmail(in.Email)
-	if email != "" && s.allowEmailSend(s.resetRequests, email, r) {
+	if email != "" && s.allowPasswordResetEmail(email, r) {
 		_ = s.RequestPasswordReset(r.Context(), email)
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "sent"})

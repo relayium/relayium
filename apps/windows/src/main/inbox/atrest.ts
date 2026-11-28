@@ -38,6 +38,9 @@ export type AtRestKind =
   | "vault-index"
   | "journal"
   | "send-plan"
+  | "stored-upload-recovery"
+  | "sent-history"
+  | "inbox-upload-key"
   /**
    * Presentation metadata for a delivery: what arrived, by name.
    *

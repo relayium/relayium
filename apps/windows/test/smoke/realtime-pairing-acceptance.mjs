@@ -623,6 +623,7 @@ async function runRound(root, bin, index, plan, guardianBin) {
       code,
       token: plan.codeRole === "create" ? token : null,
       accountEmail: email,
+      password: plan.codeRole === "create" ? password : null,
       userDataDir: join(dir, "profile"),
       secretsDir: join(dir, "secrets"),
       destinationDir: join(dir, "dest"),

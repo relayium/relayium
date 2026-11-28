@@ -412,6 +412,75 @@ async function main() {
     !phaseTexts.some((s) => /needs a decision/i.test(String(s))),
     JSON.stringify(phaseTexts),
   );
+
+  // Current macOS parity: one device owns both composer and both directions.
+  const conversation = {
+    targets: [{ deviceID: "peer-a", name: "Study PC", eligible: true, refusal: null }, { deviceID: "peer-b", name: "Travel PC", eligible: true, refusal: null }],
+    sent: [{ id: "job-aa", peerID: "peer-a", createdAt: 30, kind: "text", bytes: 12, body: "  sent\nexact ", items: [], state: "queued" }],
+    messages: [{ id: "message-a", taskID: "message-task", sourceDeviceID: "peer-a", receivedAt: 10, bytes: 8 }],
+    named: [{ taskID: "file-task", sourceDeviceID: "peer-a", receivedAt: 20, text: false, declared: 2, items: [{ name: "received.pdf", size: 12 }] },
+      { taskID: "legacy-task", receivedAt: 5, text: false, declared: 1, items: [{ name: "legacy.txt", size: 3 }] }],
+    text: { "message-a": "received\nexact" },
+  };
+  await js(`window.__inboxHarness.setConversation(${JSON.stringify(conversation)})`); await js(`window.__tick()`);
+  equal("three device buckets include legacy attribution", await js(`window.__count("[data-test=conversation-device]")`), 3);
+  check("select device A", await js(`window.__click('[data-test=conversation-device][data-peer="peer-a"]')`));
+  equal("one timeline includes both directions", await js(`window.__count("[data-test=conversation-row]")`), 3);
+  equal("one outgoing row", await js(`window.__count('[data-test=conversation-row][data-direction="sent"]')`), 1);
+  check("received filename visible", await js(`document.body.textContent.includes("received.pdf")`));
+  check("legacy filename never attributed to device A", !await js(`document.querySelector('[data-test=inbox-conversation-history]').textContent.includes("legacy.txt")`));
+  check("open sent text", await js(`window.__click('[data-test=conversation-open-sent]')`));
+  equal("sent text retains whitespace", await js(`document.querySelector('[data-test=conversation-sent-body]').textContent`), "  sent\nexact ");
+  equal("short text has no disclosure", await js(`window.__count('[data-test=inbox-message-disclosure]')`), 0);
+  check("close short sent text", await js(`window.__click('[data-test=conversation-open-sent]')`));
+  const sentText = "🙂".repeat(160) + " sent ".repeat(9000) + "sent tail";
+  const receivedText = "one\ntwo\nthree\nfour\nreceived tail";
+  const longConversation = {
+    ...conversation,
+    sent: conversation.sent.map((row) => ({ ...row, body: sentText })),
+    text: { "message-a": receivedText },
+  };
+  await js(`window.__inboxHarness.setConversation(${JSON.stringify(longConversation)})`);
+  check("open long sent text", await js(`window.__click('[data-test=conversation-open-sent]')`));
+  check("open long received text", await js(`window.__click('[data-test=inbox-open]')`));
+  const sentDisclosure = '[data-direction="sent"] [data-test=inbox-message-disclosure]';
+  const receivedDisclosure = '[data-direction="received"] [data-test=inbox-message-disclosure]';
+  const sentBody = '[data-test=conversation-sent-body]';
+  const receivedBody = '[data-test=conversation-received-body]';
+  const message = (selector) => js(`document.querySelector(${JSON.stringify(selector)}).textContent`);
+  const click = (selector) => js(`window.__click(${JSON.stringify(selector)})`);
+  equal("long sent text starts as a Unicode-safe preview", await message(sentBody), "🙂".repeat(160) + "…");
+  equal("long received text starts with four lines", await message(receivedBody), "one\ntwo\nthree\nfour…");
+  check("expand only the sent text", await click(sentDisclosure));
+  equal("expanded sent body preserves all characters", await message(sentBody), sentText);
+  equal("received text remains folded", await message(receivedBody), "one\ntwo\nthree\nfour…");
+  check("copy a folded message from its own header", await click('[data-test=inbox-copy-top]'));
+  equal("copy uses the original message ID", await js(`window.__inboxHarness.calls().copied.at(-1)`), "message-a");
+  check("expand the received text", await click(receivedDisclosure));
+  equal("expanded received body preserves all characters", await message(receivedBody), receivedText);
+  check("collapse only the sent text", await click(sentDisclosure));
+  equal("collapsed sent body returns to its preview", await message(sentBody), "🙂".repeat(160) + "…");
+  equal("received body stays expanded", await message(receivedBody), receivedText);
+  check("choose text composer", await js(`window.__click('[data-test=inbox-send-mode-text]')`));
+  await js(`{const input=document.querySelector('[data-test=inbox-send-message]'); input.value='only for A'; input.dispatchEvent(new Event('input',{bubbles:true}));}`);
+  check("select device B", await js(`window.__click('[data-test=conversation-device][data-peer="peer-b"]')`));
+  equal("device B cannot inherit A's text draft", await js(`document.querySelector('[data-test=inbox-send-message]').value`), "");
+  equal("device B cannot inherit A's history", await js(`window.__count('[data-test=conversation-row]')`), 0);
+  check("return to device A", await js(`window.__click('[data-test=conversation-device][data-peer="peer-a"]')`));
+  check("open snapshot confirmation", await js(`window.__click('[data-test=conversation-delete-all]')`));
+  check("deletion is a real modal", await js(`document.querySelector('dialog').matches(':modal')`));
+  const later = { ...conversation, sent: [...conversation.sent, { ...conversation.sent[0], id: "job-bb", createdAt: 40, body: "new arrival" }] };
+  await js(`window.__inboxHarness.setConversation(${JSON.stringify(later)})`); await js(`window.__tick()`);
+  check("confirm captured snapshot", await js(`window.__click('[data-test=conversation-confirm-delete]')`)); await js(`window.__tick()`);
+  equal("later arrival survives whole-conversation delete", await js(`window.__count('[data-test=conversation-row]')`), 1);
+  const deleted = await js(`window.__inboxHarness.calls()`);
+  check("only captured message deleted", JSON.stringify(deleted.deletedMessages) === JSON.stringify(["message-a"]), JSON.stringify(deleted));
+  check("new sent arrival never included in deletion", !deleted.forgotten.includes("job-bb"), JSON.stringify(deleted));
+  check("legacy bucket opens", await js(`window.__click('[data-test=conversation-device][data-peer=""]')`));
+  equal("legacy bucket has only its own history", await js(`window.__count('[data-test=conversation-row]')`), 1);
+  check("legacy bucket cannot send", await js(`document.querySelector('[data-test=inbox-send-start]')===null`));
+  await js(`window.__inboxHarness.setLang('zh')`); await js(`window.__tick()`);
+  check("conversation copy is localized", await js(`document.querySelector('[data-test=inbox-conversation-history]').textContent.includes('会话记录')`));
 }
 
 main()

@@ -89,7 +89,7 @@ final class IOSActionColorGuardTests: XCTestCase {
                       "\(Self.styleFile) no longer applies the style it owns")
     }
 
-    /// Every one of the 61 sites, and the split between them.
+    /// Each bordered action site and its role.
     ///
     /// The numbers are asserted rather than merely counted so that a control
     /// deleted, added or reclassified has to be looked at. `>=` would let the
@@ -120,20 +120,16 @@ final class IOSActionColorGuardTests: XCTestCase {
         // longest way in, below the prominent password submit and the system
         // Apple button. A21 adds one: the received-file Open / Share / Save to
         // Files group in `DeviceConversationView`, ordinary, applied once to
-        // the three.
-        XCTAssertEqual(ordinary, 43, "ordinary bordered actions")
+        // the three. The inbox message disclosure adds one ordinary style
+        // site shared by the Expand text and Collapse text buttons.
+        XCTAssertEqual(ordinary, 44, "ordinary bordered actions")
         XCTAssertEqual(destructive, 20, "destructive bordered actions")
         XCTAssertEqual(conditional, 1,
                        "exactly one control has a conditional role: "
                        + "NearbyLinkWorkspaceView's exit, destructive while the "
                        + "session is live and ordinary once it has ended")
-        XCTAssertEqual(ordinary + destructive + conditional, 64,
-                       "the app had 64 bordered controls when this boundary was drawn, "
-                       + "61 since Cross-network became connect-first, 64 with the A23 "
-                       + "connection prompt, the A17 browser sign-in and the A21 file actions; "
-                       + "a new one is fine, "
-                       + "but it has to be counted here and its role has to be a decision "
-                       + "rather than a default")
+        XCTAssertEqual(ordinary + destructive + conditional, 65,
+                       "each bordered control must have a reviewed role")
     }
 
     /// **The role on the style must match the role on the button.**
@@ -179,7 +175,7 @@ final class IOSActionColorGuardTests: XCTestCase {
                                + "2.02:1 accent.")
             }
         }
-        XCTAssertEqual(checked, 64, "every bordered control must have been paired")
+        XCTAssertEqual(checked, 65, "every bordered control must have been paired")
     }
 
     /// A line that is prose rather than code.

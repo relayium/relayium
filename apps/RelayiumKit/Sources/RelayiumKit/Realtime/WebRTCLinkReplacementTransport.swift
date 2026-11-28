@@ -799,6 +799,13 @@ public final class WebRTCLinkReplacementTransport: NSObject {
     }
 
     /// Bytes still queued on one lane, for a caller doing its own flow control.
+    private let fileBufferDrain = LinkBufferDrainSignal()
+
+    public func observeFileBufferDrain(whenAtMost threshold: UInt64,
+                                       wake: @escaping () -> Void) -> () -> Void {
+        fileBufferDrain.observe(whenAtMost: threshold, wake: wake)
+    }
+
     public func bufferedAmount(on lane: LinkLane) -> UInt64 {
         queue.sync { establishment.bufferedAmount(on: lane) }
     }
@@ -1140,6 +1147,15 @@ extension WebRTCLinkReplacementTransport: RTCPeerConnectionDelegate {
 // MARK: - RTCDataChannelDelegate
 
 extension WebRTCLinkReplacementTransport: RTCDataChannelDelegate {
+    public func dataChannel(_ dataChannel: RTCDataChannel, didChangeBufferedAmount amount: UInt64) {
+        queue.later { [weak self] in
+            guard let self, !self.closed, dataChannel.label == LinkLane.file.label else { return }
+            // Read the actual buffer; do not depend on whether a WebRTC version
+            // reports the old amount or the new amount in its delegate argument.
+            self.fileBufferDrain.notify(bufferedAmount: self.establishment.bufferedAmount(on: .file))
+        }
+    }
+
     public func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {
         queue.later { [weak self] in
             guard let self, !self.closed else { return }

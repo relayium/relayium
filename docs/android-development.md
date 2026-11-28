@@ -3,12 +3,63 @@
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
-any kind. The release manifest selects 0.3.3 (versionCode 12), signed on
-2026-10-26 for the GitHub direct-APK preview channel `android-v0.3.3`.
-The release asset and relayium.com update feed are published and verified in
-separate steps; actual public URLs determine the version currently available.
+any kind. The release manifest selects 0.3.5 (versionCode 14) for the
+[GitHub direct-APK preview](https://github.com/relayium/relayium/releases/tag/android-v0.3.5).
+The asset and the relayium.com update feed are verified separately.
 
-### Android 0.3.3 (12) release inputs
+### Android 0.3.5 (14) release inputs
+
+`Relayium-0.3.5-14.apk` was built from
+`95097e99b4b54bf1728cebb91993f5db266df8e3`. The APK checksum, size and
+release URL are in [android-release.json](../web/android-release.json).
+Connected cross-network and Nearby sessions can copy full sent and received
+messages. Android 13 and newer suppress the message text in the system
+clipboard preview. The APK passed same-certificate in-place upgrade from
+0.3.4 on an Android API 36 ARM64 emulator. Both message directions passed
+the clipboard UI tests.
+
+### Historical Android 0.3.4 (13) release inputs
+
+[GitHub Release `android-v0.3.4`](https://github.com/relayium/relayium/releases/tag/android-v0.3.4)
+is public, with the immutable APK and its checksum. Both assets were downloaded
+anonymously and verified. The tag and release metadata point at
+`b5d9eff94970f70723004b480c3f89344f82b42f`; the APK retains its true build source
+below. Website download metadata and the deployed advisory policy are separate
+from this GitHub release and require their own live read-back.
+
+`Relayium-0.3.4-13.apk` comes from clean, pushed source
+`b2bb5c2ee04e37f1b9c5fc2c3a91b369601479d0`. SHA-256:
+`4cbc1526c4942c9ef25056dfe9945526758920595f418a0a7792d08cc1aea309`;
+size 46,074,442 bytes. The existing signing certificate remains unchanged:
+`ac867828a511f15e9214498f234d8898bbd56033342edd7e70d8037c20380aad`.
+
+While Device Inbox is visible, the existing serialized receiver checks pending
+work every two seconds. Empty probes avoid repeating folder/disk checks,
+device-directory reads and heartbeats. Those keep their maintenance cadence;
+failures retain backoff. Visible sent status is also polled every two seconds,
+independently of whether this device accepts incoming deliveries. Text messages
+have Copy above and below the full body. Ask consent, pause, foreground-only
+receiving, account isolation, encrypted storage and explicit file export retain
+their existing behavior. This improves discovery/status latency and does not
+claim higher file transfer throughput or OS background delivery.
+
+Acceptance: the prior scheduling source passed 1,743 JVM tests without skips
+or failures, and Android hosted CI; final source release build/lint and the
+new UI's Kotlin compilation passed. Signed v2/v3 APK, 16 KB alignment, unchanged
+SDK/permissions/components/ABIs and unsigned-entry equality passed. An isolated
+API 36 ARM64 emulator upgraded the provider-digest-verified public 0.3.3 APK in
+place, retained UID and a private synthetic data marker, cold-launched without a
+fatal exception, refused downgrade and rejected a one-byte signature mutation.
+This does not claim a signed-in physical-phone or WAN test of the new header
+Copy. Publication passed all three original metadata workflows and all 45
+provider checks (44 success and one existing certification skip), with the
+unfiltered gate passing. Anonymous reads assembled all 46,074,442 APK bytes
+from 88 verified HTTP ranges; the full hash, checksum, v2/v3 signatures,
+certificate, package and version match. The repository advisory
+recommendation is synchronized to 0.3.4 (13), revision 5, as required by the
+existing publication guard. The deployed backend and its policy remain unchanged.
+
+### Historical Android 0.3.3 (12) release inputs — 2026-10-26
 
 `Relayium-0.3.3-12.apk` comes from clean, pushed source
 `1db78a4a730c4db44e6f7509cf13489475cbb9e3`. SHA-256:

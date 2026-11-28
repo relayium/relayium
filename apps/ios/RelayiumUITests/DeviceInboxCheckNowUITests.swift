@@ -4,10 +4,9 @@ import XCTest
 ///
 /// The launches below replace only the transport (`UITestInbox`): the shared
 /// `InboxController`, its serial loop and coalescing, enrolment, key store,
-/// decryption, container commit and journal are the product's. The automatic
-/// schedule is stretched to an hour and every pass after launch is held for a
-/// moment, so each state asserted here is the answer to a press made here — not
-/// the loop's own timer — and Checking… is on screen long enough to observe.
+/// decryption, container commit and journal are the product's. Foreground probes
+/// remain active; the fixture advances only on explicit Checking transitions and
+/// holds those pending reads so Checking remains on screen long enough to observe.
 ///
 /// The macOS counterpart is `DeviceInboxUITests.testCheckNowShowsCheckingThen…`;
 /// this adds what a phone makes easy to get wrong: a double tap, and a check

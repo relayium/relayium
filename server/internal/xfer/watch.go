@@ -65,6 +65,8 @@ func realTimer(d time.Duration) (<-chan time.Time, func() bool) {
 // WatchOpts tunes WatchAndSync. The zero value is usable: every field falls
 // back to its documented default.
 type WatchOpts struct {
+	// Excludes uses the same user-supplied patterns as the manifest walk.
+	Excludes Excludes
 	// Debounce is how long a change storm is coalesced before a sync attempt.
 	Debounce time.Duration
 	// MinBackoff and MaxBackoff bound the retry delay after a failed sync.
@@ -153,6 +155,9 @@ func WatchAndSync(ctx context.Context, roots []string, sync func() error, opts W
 		case ev, ok := <-events:
 			if !ok {
 				return ErrWatcherClosed
+			}
+			if l.excluded(ev.Name) {
+				continue
 			}
 			l.observe(ev)
 			l.requestSooner(l.opts.Debounce)
@@ -309,6 +314,32 @@ func (l *watchLoop) reconcile() error {
 	return nil
 }
 
+// excluded is true only if every source root containing p excludes it.
+// A nested directory explicitly selected as a root still gets its own watch.
+func (l *watchLoop) excluded(p string) bool {
+	if len(l.opts.Excludes) == 0 {
+		return false
+	}
+	matchedRoot := false
+	prefix := strings.TrimSuffix(p, string(filepath.Separator)) + string(filepath.Separator)
+	for _, root := range l.roots {
+		// An excluded ancestor may still hold another explicit source. Watch
+		// the ancestor so moving it invalidates the nested source's watch.
+		if p == root.path || strings.HasPrefix(root.path, prefix) {
+			return false
+		}
+		rel, err := filepath.Rel(root.path, p)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		matchedRoot = true
+		if !l.opts.Excludes.excludesPath(filepath.ToSlash(rel)) {
+			return false
+		}
+	}
+	return matchedRoot
+}
+
 // observe keeps the watch set in step with the tree.
 //
 // It can only ever do half the job: fsnotify reports what happened under a
@@ -449,6 +480,9 @@ func (l *watchLoop) addTree(root string) error {
 	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if d.IsDir() && l.excluded(p) {
+			return fs.SkipDir
 		}
 		if !d.IsDir() {
 			return nil

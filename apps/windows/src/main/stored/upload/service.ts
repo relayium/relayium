@@ -62,6 +62,9 @@ import { JournalError, UploadJournal, type UploadRecord } from "./journal.js";
 import { manifestDigest, reconcileUpload, type ReconcileOutcome } from "./reconcile.js";
 import { planUpload, sealedManifestFits, type UploadDescriptor, type UploadRefusal } from "./plan.js";
 import { UploadTransport, type UploadRetention } from "./transport.js";
+import { PreparedUploadEngine } from "./prepared-engine.js";
+import { RecoveryStore, RecoveryStoreError, type RecoveryPlan } from "./recovery-store.js";
+import type { StoredSendPhase } from "../../../shared/ipc-contract.js";
 
 /** The next frame the producer owes: its file, its global sequence number and
  *  its exact ciphertext length. Everything a producer needs to be checkable. */
@@ -110,7 +113,7 @@ export interface StartRequest {
   /** Ordered, and the producer MUST encrypt this exact array in this order. */
   readonly descriptors: readonly UploadDescriptor[];
   readonly retention: UploadRetention;
-  readonly onProgress?: (committed: number, total: number) => void;
+  readonly onProgress?: (committed: number, total: number, phase?: StoredSendPhase) => void;
 }
 
 /**
@@ -130,7 +133,7 @@ interface Job {
   readonly id: string;
   readonly accountId: string;
   readonly fence: Fence;
-  engine: UploadEngine | null;
+  engine: UploadEngine | PreparedUploadEngine | null;
   readonly finished: Promise<void>;
   /** The durable settlement, once one is under way. A quiesce joins it. */
   settling: Promise<void> | null;
@@ -140,6 +143,8 @@ export interface StoredUploadServiceOptions {
   readonly secrets: SecretStore;
   /** Where the journal file lives. The host's userData directory. */
   readonly journalDirectory: string;
+  /** Enabled by the desktop composition once its recovery controls are wired. */
+  readonly enableRecovery?: boolean;
   readonly runtime?: () => Promise<StoredRuntime>;
   /** Test seam. Production builds one per job from the captured authority. */
   readonly transportFactory?: (authority: { origin: string; bearer: string }) => UploadTransport;
@@ -173,7 +178,7 @@ export const MAX_ACTIVE_JOBS = 8;
 interface AuxiliaryOperation {
   readonly id: string;
   readonly accountId: string;
-  readonly kind: "link" | "delete" | "reconcile";
+  readonly kind: "link" | "delete" | "reconcile" | "recovery-discard";
   readonly aborter: AbortController;
   readonly done: Promise<void>;
 }
@@ -187,13 +192,17 @@ function asFailureCode(note: string | null): UploadFailureCode {
 export class StoredUploadService {
   private readonly custody: UploadKeyCustody;
   private readonly journal: UploadJournal;
+  private readonly recovery: RecoveryStore;
   private readonly jobs = new Map<string, Job>();
   private readonly auxiliary = new Map<string, AuxiliaryOperation>();
+  private readonly recoveryMutations = new Set<string>();
+  private readonly cleanupWarnings = new Set<string>();
   private nextAuxiliary = 1;
 
   constructor(private readonly options: StoredUploadServiceOptions) {
     this.custody = new UploadKeyCustody(options.secrets);
     this.journal = new UploadJournal(options.journalDirectory, options.now);
+    this.recovery = new RecoveryStore(options.journalDirectory, options.secrets);
   }
 
   private transportFor(authority: { origin: string; bearer: string }): UploadTransport {
@@ -236,6 +245,112 @@ export class StoredUploadService {
     return this.journal.get(jobId);
   }
 
+  /** Synchronous lifecycle fact: a refused concurrent call did not end a job. */
+  isLive(jobId: string): boolean { return this.jobs.has(jobId); }
+
+  async recoveryPlans(accountId: string, origin: string, includePublished = false): Promise<readonly RecoveryPlan[]> {
+    if (!this.options.enableRecovery) return [];
+    return (await this.recovery.list(accountId, origin)).filter((plan) => includePublished || plan.phase !== "published");
+  }
+
+  /** Explicit user resume. Rebind fresh account authority, verify custody,
+   * manifest and complete ciphertext before any network operation. */
+  async resume(input: {
+    readonly jobId: string;
+    readonly revision: number;
+    readonly authority: AuthorityInput;
+    readonly onProgress?: (committed: number, total: number, phase?: StoredSendPhase) => void;
+  }): Promise<UploadOutcome> {
+    if (!this.options.enableRecovery || this.jobs.has(input.jobId) || this.recoveryMutations.has(input.jobId) || this.jobs.size >= MAX_ACTIVE_JOBS) {
+      throw new RecoveryStoreError("conflict");
+    }
+    const authority = captureAuthority(input.authority);
+    const fence = new Fence(authority);
+    let release!: () => void;
+    const finished = new Promise<void>((resolve) => { release = resolve; });
+    const job: Job = { id: input.jobId, accountId: authority.accountId, fence, engine: null, finished, settling: null };
+    this.jobs.set(input.jobId, job);
+    try {
+      const record = await this.journal.get(input.jobId);
+      if (!record || record.accountId !== authority.accountId || record.state === "closed" || record.state === "published") {
+        throw new RecoveryStoreError("account");
+      }
+      const plan = await this.recovery.read(authority.accountId, authority.origin, input.jobId);
+      if (plan.revision !== input.revision) throw new RecoveryStoreError("conflict");
+      const held = await this.custody.read(input.jobId, authority.accountId);
+      const runtime = await (this.options.runtime?.() ?? storedRuntime());
+      const key = await runtime.importKeyFromFragment(held.encodedKey);
+      const manifest = await runtime.decryptManifest(key, new Uint8Array(Buffer.from(plan.sealedManifest, "base64")));
+      if (manifest.files.length !== plan.descriptors.length || manifest.files.some((file, index) =>
+        file.name !== plan.descriptors[index]?.path || file.size !== plan.descriptors[index]?.size)) {
+        throw new RecoveryStoreError("corrupt");
+      }
+      fence.assert();
+      job.engine = await PreparedUploadEngine.recover({
+        store: this.recovery, runtime, transport: this.transportFor(authority), fence,
+        onStage: (phase) => { if (fence.valid) input.onProgress?.(job.engine?.progress.committed ?? 0, plan.cipherBytes, phase); },
+        hooks: {
+          onProgress: (committed, total) => { if (fence.valid) input.onProgress?.(committed, total, "uploading"); },
+          onSession: async (uploadId) => { await this.journal.update(input.jobId, { uploadId }); },
+        },
+      }, authority.accountId, authority.origin, input.jobId);
+      fence.assert();
+      const outcome = await job.engine.end();
+      await this.settle(input.jobId, outcome);
+      return outcome.status === "published" && this.cleanupWarnings.has(input.jobId) ? { ...outcome, cleanupPending: true } : outcome;
+    } finally {
+      // Errors before an engine exists do not rewrite the journal, erase a
+      // key or assert anything about a possibly finalized server object.
+      if (this.jobs.get(input.jobId) === job) this.jobs.delete(input.jobId);
+      release();
+    }
+  }
+
+  async discardRecovery(input: {
+    readonly jobId: string; readonly revision: number; readonly accountId: string; readonly origin: string;
+    readonly signal?: AbortSignal;
+    readonly confirm: (signal: AbortSignal, mayHaveFinished: boolean) => Promise<boolean>;
+  }): Promise<"discarded" | "declined" | "refused" | "failed"> {
+    if (!this.options.enableRecovery || this.jobs.has(input.jobId) || this.recoveryMutations.has(input.jobId)) return "refused";
+    this.recoveryMutations.add(input.jobId);
+    try {
+      return await this.auxiliaryRun("recovery-discard", input.accountId, input.signal, async (signal, check) => {
+        const plan = await this.recovery.read(input.accountId, input.origin, input.jobId);
+        const record = await this.journal.get(input.jobId);
+        if (record && record.accountId !== input.accountId || !record && plan.phase !== "published" || plan.revision !== input.revision) return "refused";
+        check();
+        if (!(await input.confirm(signal, plan.phase === "finalizing" || plan.phase === "published"))) return "declined";
+        check();
+        const latest = await this.recovery.read(input.accountId, input.origin, input.jobId);
+        if (latest.revision !== input.revision || this.jobs.has(input.jobId)) return "refused";
+        check();
+        if (plan.phase === "published") {
+          // A resolved journal entry may already have been compacted. Explicit
+          // cleanup of its authenticated published spool never deletes the key
+          // or makes a server request, and does not require recreating history.
+          const current = await this.journal.get(input.jobId);
+          if (current && current.accountId !== input.accountId) return "refused";
+          check();
+          await this.recovery.remove(latest);
+          this.cleanupWarnings.delete(input.jobId);
+          if (current?.state === "published" && current.objectId === plan.objectId) await this.journal.update(input.jobId, { note: null });
+          return "discarded";
+        }
+        // Record the explicit intent BEFORE cleanup. A failure is retryable;
+        // it cannot resurrect this plan as a new resumable paid operation.
+        await this.journal.update(input.jobId, plan.phase === "finalizing"
+          ? { state: "ambiguous", note: "cancelled" } : { state: "closed", note: "recovery-discarded" });
+        check();
+        await this.recovery.remove(latest);
+        if (plan.phase !== "finalizing") await this.custody.retire(input.jobId, "server-absent");
+        // Unknown finalization retains the key and digest in the journal so
+        // read-only manifest reconciliation can still recover the old link.
+        return "discarded";
+      });
+    } catch { return "failed"; }
+    finally { this.recoveryMutations.delete(input.jobId); }
+  }
+
   /**
    * Begin one upload.
    *
@@ -258,6 +373,9 @@ export class StoredUploadService {
       authority = captureAuthority(request.authority);
     } catch {
       return this.refuse("authority");
+    }
+    if (this.options.enableRecovery && [...this.jobs.values()].some((job) => job.accountId === authority.accountId)) {
+      return this.refuse("at-capacity");
     }
     // The active bound, checked HERE — before the runtime load, the key
     // generation and the seal — so an inadmissible start costs none of them.
@@ -297,6 +415,11 @@ export class StoredUploadService {
         return this.refuseRefusal(planned.refusal);
       }
       const plan = planned.plan;
+      if (this.options.enableRecovery) {
+        const existing = await this.recoveryPlans(authority.accountId, authority.origin);
+        if (existing.length) return this.abandon(jobId, "at-capacity");
+        fence.assert();
+      }
 
       // Wrapped: a throw from either of these used to escape `start` with the
       // registry entry still in place, leaving a job nothing would ever stop.
@@ -361,9 +484,24 @@ export class StoredUploadService {
       }
 
       const transport = this.transportFor(authority);
-      let engine: UploadEngine;
+      let engine: UploadEngine | PreparedUploadEngine;
       try {
-        engine = await UploadEngine.open({
+        const hooks = {
+          onProgress: (committed: number, total: number) => {
+            if (fence.valid) request.onProgress?.(committed, total, "uploading");
+          },
+          onSession: async (uploadId: string) => { await this.journal.update(jobId, { uploadId }); },
+        };
+        engine = this.options.enableRecovery
+          ? await PreparedUploadEngine.create({ store: this.recovery, runtime, transport, fence, hooks,
+            onStage: (phase) => { if (fence.valid) request.onProgress?.(job.engine?.progress.committed ?? 0, plan.cipherBytes, phase); },
+          }, {
+            jobId, accountId: authority.accountId, origin: authority.origin,
+            createdAt: this.options.now?.() ?? Math.floor(Date.now() / 1000),
+            descriptors: request.descriptors, sealedManifest: Buffer.from(sealed).toString("base64"),
+            cipherBytes: plan.cipherBytes, retention: request.retention,
+          })
+          : await UploadEngine.open({
           runtime,
           key: generated.key,
           sealedManifest: sealed,
@@ -371,15 +509,7 @@ export class StoredUploadService {
           retention: request.retention,
           transport,
           fence,
-          hooks: {
-            onProgress: (committed, total) => {
-              // Fenced: a revoked job publishes no further progress.
-              if (fence.valid) request.onProgress?.(committed, total);
-            },
-            onSession: async (uploadId) => {
-              await this.journal.update(jobId, { uploadId });
-            },
-          },
+          hooks,
         });
       } catch (error) {
         // An init that failed — or whose answer was lost — leaves at most a
@@ -485,7 +615,7 @@ export class StoredUploadService {
     try {
       const outcome = await engine.end();
       await this.settle(jobId, outcome);
-      return outcome;
+      return outcome.status === "published" && this.cleanupWarnings.has(jobId) ? { ...outcome, cleanupPending: true } : outcome;
     } catch (error) {
       const outcome = engine.outcome;
       if (outcome === null) throw error;
@@ -564,6 +694,7 @@ export class StoredUploadService {
     if (record.state === "ambiguous") {
       return { status: "ambiguous", code: asFailureCode(record.note) };
     }
+    if (record.state === "interrupted") return { status: "interrupted", code: asFailureCode(record.note) };
     if (record.state === "pending") {
       // Still pending with no live job: the start died without settling. Its
       // outcome is not knowable from here, and it is not "nothing happened".
@@ -756,7 +887,7 @@ export class StoredUploadService {
 
   /** The engine of a job whose start has completed. A pending start has no
    *  engine to drive, and a producer cannot have been told to feed one yet. */
-  private liveEngine(jobId: string): UploadEngine {
+  private liveEngine(jobId: string): UploadEngine | PreparedUploadEngine {
     const engine = this.jobs.get(jobId)?.engine;
     if (engine === undefined || engine === null) throw new UploadFailure("internal");
     return engine;
@@ -802,10 +933,23 @@ export class StoredUploadService {
           expiresAt: outcome.expiresAt,
           note: null,
         });
+        {
+          const engine = this.jobs.get(jobId)?.engine;
+          if (engine instanceof PreparedUploadEngine) {
+            try { await engine.releasePublishedCopy(); }
+            catch {
+              this.cleanupWarnings.add(jobId);
+              await this.journal.update(jobId, { note: "cleanup-pending" }).catch(() => undefined);
+            }
+          }
+        }
         return;
       case "ambiguous":
         // The key stays. The record stays. Neither is evicted on a lifetime.
         await this.journal.update(jobId, { state: "ambiguous", note: outcome.code });
+        return;
+      case "interrupted":
+        await this.journal.update(jobId, { state: "interrupted", note: outcome.code });
         return;
       case "cancelled":
       case "failed": {

@@ -29,6 +29,8 @@ export function uploadStateKey(state: UploadState): MessageKey {
       // never learned, and offers a re-check. `pending` means nothing was ever
       // finalized, so there is nothing to re-check and nothing to share.
       return "sendHistoryPending";
+    case "interrupted":
+      return "sendHistoryInterrupted";
     default: {
       const unhandled: never = state;
       void unhandled;

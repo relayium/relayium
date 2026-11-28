@@ -1,3 +1,5 @@
+import type { PasswordAuthClient } from "./account/password-auth.js";
+import type { PasswordSignInOutcome } from "../shared/ipc-contract.js";
 // Everything the renderer can cause, with no Electron import.
 //
 // Kept separate from `handlers.ts` so the rules below can be driven by tests
@@ -107,6 +109,7 @@ export interface AppServiceDeps {
   /** May throw — an unusable data root or cipher must surface, not be papered over. */
   makeStore(): Promise<SecretStore>;
   makeAuthClient(installationID: string): DeviceAuthClient;
+  makePasswordAuthClient?(): Pick<PasswordAuthClient, "login">;
   /** The pairing-code minter. Absent in tests that never mint. */
   makePairControl?(): PairControl;
   /**
@@ -971,9 +974,7 @@ export class AppService {
    * followed by a sign in — and it removes a whole token backup/restore
    * subsystem whose failure modes would be worse than the feature.
    */
-  async startSignIn(
-    nonce: string,
-  ): Promise<{ attemptNonce: string; userCode: string; interval: number; expiresIn: number }> {
+  private beginSignIn(nonce: string): { mine: Attempt; captured: number } {
     if (this.disposed) throw new ServiceRefusal("service disposed");
     if (nonce.length === 0 || nonce.length > MAX_ATTEMPT_NONCE_LENGTH) {
       throw new ServiceRefusal("malformed sign-in nonce");
@@ -1008,7 +1009,43 @@ export class AppService {
       compensationDetail: null,
     };
     this.attempt = mine;
-    // ----------------------------------------------------------------------
+
+    return { mine, captured };
+  }
+
+  async passwordSignIn(nonce: string, email: string, password: string): Promise<PasswordSignInOutcome> {
+    if (!email.trim() || email.length > 320 || !password || password.length > 2048) {
+      throw new ServiceRefusal("malformed login input");
+    }
+    const { mine, captured } = this.beginSignIn(nonce);
+    try {
+      const session = await this.session();
+      this.assertEpoch(captured);
+      this.assertAttempt(mine);
+      await this.refuseWhenSignedIn(session);
+      this.assertEpoch(captured);
+      this.assertAttempt(mine);
+      const client = this.deps.makePasswordAuthClient?.();
+      if (!client) throw new ServiceRefusal("password login unavailable");
+      const outcome = await client.login(email, password, mine.abort.signal);
+      this.assertEpoch(captured);
+      this.assertAttempt(mine);
+      if (outcome.status !== "ok") {
+        this.retire(mine);
+        return outcome;
+      }
+      await this.adopt(mine, captured, session, outcome.accessToken, outcome.accountEmail);
+      return { status: "ok", accountEmail: outcome.accountEmail };
+    } catch (err) {
+      this.retire(mine);
+      throw err;
+    }
+  }
+
+  async startSignIn(
+    nonce: string,
+  ): Promise<{ attemptNonce: string; userCode: string; interval: number; expiresIn: number }> {
+    const { mine, captured } = this.beginSignIn(nonce);
 
     try {
       const session = await this.session();

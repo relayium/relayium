@@ -147,58 +147,29 @@ struct DeviceInboxSurface: View {
                         // the user is in the middle of writing.
                         .id(peer.id)
                 } else {
-                    // **The order is how often the question is asked, and
-                    // pending work outranks everything.**
-                    //
-                    // It used to be status → notification → asking → folder →
-                    // policy → conversations → devices → login item: two
-                    // configuration sections that a set-up Mac changes
-                    // approximately never sat ABOVE every conversation and
-                    // every device this Mac can send to. Somebody opening this
-                    // pane to read what arrived scrolled past the receive
-                    // folder and the auto-accept policy to reach it, every
-                    // time.
-                    //
-                    //  1. `askSection` — central is holding these for an
-                    //     answer, nothing is downloaded or written until it
-                    //     gets one, and they expire. It renders only when
-                    //     something is actually waiting, so first place costs
-                    //     nothing in the ordinary case and is the whole pane in
-                    //     the one that matters.
-                    //  2. status and its recovery — can this Mac take a
-                    //     delivery right now, and the one control that fixes it
-                    //     when it cannot.
-                    //  3. `notificationSection` — conditional, and a different
-                    //     KIND of fact: receiving works, the announcement does
-                    //     not. It stays with the availability answers above it
-                    //     rather than moving down with the settings, because it
-                    //     is a problem to act on rather than a preference to
-                    //     revisit.
-                    //  4. what has passed between the devices, then the devices
-                    //     themselves.
-                    //  5. the three configuration sections, last.
-                    //
-                    // **They are not collapsed here, and that is deliberate.**
-                    // The iOS surface discloses its one consent control because
-                    // a phone genuinely cannot show the whole destination at
-                    // once. This is a resizable window with a scrolling page
-                    // and three short sections, and the one thing a Mac user
-                    // most needs to find — the receive folder, without which
-                    // nothing is delivered at all — is exactly what a collapse
-                    // would hide. Order was the defect; order is the fix.
+                    // Keep unanswered offers and receiving readiness first.
+                    // A listed peer carries its conversation on the device row;
+                    // history without a current peer remains readable below.
                     askSection
                     statusSection(offersControls: true)
                     notificationSection
-                    conversationsSection
                     // The devices, in the one branch where the account is usable
                     // for sending. Deliberately NOT in `.statusOnly`: that branch
                     // exists because the receiver refused this account's
                     // identifier, and the send half stages a durable plan under
                     // the same identifier — so it would offer a send whose only
                     // outcome is a staging failure.
+                    if inbox.folder.url == nil {
+                        folderSection
+                    }
                     DeviceSendSection(deliveries: deliveries,
+                                      conversations: inbox.conversations,
+                                      conversationSummary: conversationSummary,
                                       onAccount: { onAccount(.signIn) })
-                    folderSection
+                    conversationsSection
+                    if inbox.folder.url != nil {
+                        folderSection
+                    }
                     policySection
                     residencySection
                 }
@@ -246,24 +217,24 @@ struct DeviceInboxSurface: View {
 
     // MARK: - conversations
 
+    @ViewBuilder
     private var conversationsSection: some View {
-        SectionCard(title: L10n.t(.inboxConversationsHeading),
-                    titleIdentifier: "inbox-conversations",
-                    rows: true) {
-            CardRows {
-                if inbox.conversationStoreIssue {
-                    CardBlockRow {
-                        InlineMessage(.failure, L10n.t(.inboxConversationStoreIssue))
-                            .accessibilityIdentifier("inbox-conversation-store-issue")
+        let listedDeviceIDs = Set(deliveries.candidates.map(\.id))
+        let historyOnly = inbox.conversations.filter { !listedDeviceIDs.contains($0.peerDeviceID) }
+        if inbox.conversationStoreIssue || !historyOnly.isEmpty {
+            SectionCard(title: L10n.t(.inboxConversationsHeading),
+                        titleIdentifier: "inbox-conversations",
+                        rows: true) {
+                CardRows {
+                    if inbox.conversationStoreIssue {
+                        CardBlockRow {
+                            InlineMessage(.failure, L10n.t(.inboxConversationStoreIssue))
+                                .accessibilityIdentifier("inbox-conversation-store-issue")
+                        }
                     }
-                }
-                if inbox.conversations.isEmpty && !inbox.conversationStoreIssue {
-                    // A card is never an empty box: the grouped list this
-                    // replaced could show a bare heading, a card cannot.
-                    CardBlockRow { SupportingText(L10n.t(.inboxConversationsEmpty)) }
-                }
-                CardRowList(inbox.conversations) { conversation in
-                    conversationRow(conversation)
+                    CardRowList(historyOnly) { conversation in
+                        conversationRow(conversation)
+                    }
                 }
             }
         }

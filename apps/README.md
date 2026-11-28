@@ -1,14 +1,11 @@
 # Relayium native apps
 
-**Internal TestFlight, read back 2026-10-17.** The current internal TestFlight
-build is `1.4.10 (47)`: App Store Connect build
-`00ac1109-f56f-4487-8d3e-72b25b360ddd`, built from source
-`1030a66db34ff3e75f27ed31d6e526de42b99679`, `VALID` and `IN_BETA_TESTING` in the
-existing Relayium Internal group. English and Simplified Chinese test notes
-are set; automatic tester notification is off. Existing App Store versions,
-selected builds and external group membership remain unchanged. No App Store
-version or review was created or submitted. This is the latest recorded
-checkpoint, not a fresh private-provider query by the documentation review.
+**Internal TestFlight, read back 2026-11-27.** The current internal TestFlight build is `1.5.4 (53)`: App Store Connect build
+`e8b7e843-76a0-4ca8-afd9-8d1b7ecee4f0`, built from source
+`f4d148f5fe74c1745b01f45d321defa4896e4fdd`. Apple reports
+`VALID` and `IN_BETA_TESTING` in the existing Relayium Internal group.
+English and Simplified Chinese test notes cover long Inbox text and the transfer and device navigation refinements. This release checkpoint
+records the internal package separately from the Developer ID download.
 
 Since TestFlight `1.4.9 (46)`, Share a link can send the next encrypted part
 while waiting for the preceding part's storage confirmation, with at most two
@@ -16,17 +13,15 @@ requests in flight. Completion still requires server-confirmed durable storage.
 Older servers negotiate serial uploads. This promises no particular WAN speed;
 force-quit recovery and upload-slot recovery are separate work.
 
-macOS **1.5.1** is published through the direct-download channel.
-GitHub Release `macos-v1.5.1` carries the signed DMG; its version, build and
+macOS **1.5.4** is published through the direct-download channel.
+GitHub Release `macos-v1.5.4` carries the signed DMG; its version, build and
 download URL are recorded in [`web/native-releases.json`](../web/native-releases.json).
 The separately
 versioned Mac App Store channel is public at [1.4.10](https://apps.apple.com/app/id6801142976), released
 by Apple on 2026-10-21. Its version and publication date are recorded separately
-from the direct release in `web/mac-app-store-release.json`. Android **0.3.3 (12)** uses the public preview APK channel
-(`android-v0.3.3`), signed on 2026-10-26 from `1db78a4a7`. iOS has no public release: **0.5.2 (13)** has been in
-internal TestFlight testing since 2026-10-18 with parallel stored-link uploads.
-Earlier **0.5.1 (12)** remains internal, and **0.5.0 (11)** remains in the
-internal and external testing groups (per the 2026-10-18 provider read-back). The website and Sparkle feed have their own deployment and public verification;
+from the direct release in `web/mac-app-store-release.json`. Android **0.3.6 (15)** is the direct APK preview (`android-v0.3.6`), built from `7409f16e`. The signed build adds per-message folding to long Device Inbox texts and preserves full text on Copy. iOS has no public release. Internal TestFlight offers **0.5.6 (17)**.
+Earlier **0.5.3 (14)** introduced faster foreground Inbox checks and Copy above
+and below received text. The website and Sparkle feed have their own deployment and public verification;
 the public URLs determine the version currently offered.
 
 - `RelayiumKit/` — pure-logic Swift package (transport, signaling, crypto, wire). Test: `cd RelayiumKit && swift test`.
@@ -41,7 +36,7 @@ the public URLs determine the version currently offered.
   `RelayiumStoreKit` (the isolated StoreKit adapter) and `RelayiumLocalPeerKit`
   (native local-peer composition); `Package.swift` defines the product boundary.
 - `mac/` — macOS SwiftUI app (`com.relayium.mac`), depends on the local RelayiumKit
-  package. Released publicly as **1.5.1** (GitHub Release `macos-v1.5.1`).
+  package. Released publicly as **1.5.4** (GitHub Release `macos-v1.5.4`).
 - `mac/RelayiumShare/` — the macOS Share Extension (`com.relayium.mac.Share`),
   embedded in the app at `Contents/PlugIns/RelayiumShare.appex`. Links
   `RelayiumShareKit` only, exactly as the iOS one does, and shares its model —
@@ -49,18 +44,18 @@ the public URLs determine the version currently offered.
   authorize `group.com.relayium.shared` and the team-prefixed wildcard and never
   `group.com.relayium.app`, and Apple documents the macOS form of an App Group
   as `<team>.<group>`, so `AppGroup.identifier` resolves per platform. It ships
-  inside the released 1.5.1 app. The system Share menu is verified to list it; a
+  inside the released 1.5.4 app. The system Share menu is verified to list it; a
   real Finder share has not yet been driven by hand.
 - `ios/` — iOS SwiftUI app (`com.relayium.mac`), same local package. **In
-  development at 0.5.2 and not public.** The bundle id is macOS's on purpose:
+  development at 0.5.6 and not public.** The bundle id is macOS's on purpose:
   iOS and macOS are two platforms of ONE universal-purchase App Store record
   (Apple ID `6801142976`), and Apple requires every platform in such a record to
   carry the same Bundle ID. That is also what puts an iOS build in front of the
   six already-Approved `com.relayium.mac.*` subscription products instead of a
   catalogue of its own.
 - `android/` — native Android client (`com.relayium.android`), Kotlin + Jetpack
-  Compose over a pure-JVM `:protocol` module. **Public preview at 0.3.3
-  (versionCode 12)**, GitHub Release inputs `android-v0.3.3`; direct APK only,
+  Compose over a pure-JVM `:protocol` module. **Public preview at 0.3.6
+  (versionCode 15)**, GitHub Release inputs `android-v0.3.6`; direct APK only,
   no Google Play, no Play Services, no Play Billing. Five destinations — Transfer, Nearby, Inbox, Cloud, Account: it mints
   a six-digit code or `/cross-network#c=` link as well as joining one, finds
   devices with no code at all, receives Device Inbox deliveries into app-private
@@ -77,12 +72,20 @@ the public URLs determine the version currently offered.
   its own Kotlin implementation, held to the same frozen wire fixtures by the
   always-on `compat.yml` gate.
 - `windows/` — Windows desktop client (`com.relayium.windows`), Electron +
-  Svelte. **In development, no public build, nothing signed.** Direct-download
-  EXE outside the Microsoft Store is the intended distribution; there is no
-  Authenticode credential in this repository and the lane builds an unsigned
-  NSIS installer as build evidence only.
+  Svelte. **Public unsigned x64 preview 0.0.6**, available at
+  [windows-v0.0.6](https://github.com/relayium/relayium/releases/tag/windows-v0.0.6).
+  Long Device Inbox messages can be individually expanded or collapsed.
+  Email/password sign-in runs inside the app; browser authorization is optional.
+  The NSIS installer is unsigned and automatic updating is not enabled. The
+  release uses the exact accepted CI installer, with a SHA-256 checksum.
 
-  The current internal candidate is `0.0.2` x64, built from source `15466b04`
+  For personal-machine testing and an executable handoff to a Windows-local
+  AI, see [Windows local QA](windows/TESTING.md). `npm run qa` records source,
+  individual logs and skips without installing the app or changing OS accounts.
+  The Windows parity baseline is macOS 1.5.2 (50), as described in
+  [current Windows scope](windows/CURRENT-PARITY.md).
+
+  The earlier September candidate was `0.0.2` x64, built from source `15466b04`
   in hosted run `35519546403`: installer SHA-256
   `5b822b592d29ea4aed66b2ffd72b87f21f391671e06ffa7860a23d1f9eeb08c1`,
   118,160,849 bytes, **unsigned**, with its installed acceptance reporting no
@@ -109,7 +112,7 @@ the public URLs determine the version currently offered.
   outstanding gap are tracked in `windows/DURABLE-PARITY.md`.
 - `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.mac.ShareIOS`),
   embedded in the app at `PlugIns/RelayiumShare.appex`. Links `RelayiumShareKit`
-  only. **In development at 0.5.2 and not public.** Its identifier is *not*
+  only. **In development at 0.5.6 and not public.** Its identifier is *not*
   `com.relayium.mac.Share` — that is the macOS extension. The target record's
   iOS TestFlight build metadata reports extension application identifier
   `7PVYUG4YQS.com.relayium.mac.ShareIOS`, so that is what this project must
@@ -161,11 +164,11 @@ operational requirement in `docs/CI-PLATFORM-BOUNDARY.md`.
 package. Views live in the app target; all logic worth testing lives in the
 `RelayiumAppKit` target inside that package and is covered by `swift test`.
 
-**Status: released as 1.5.1.** The owner requested this 1.5.1 release, the
+**Status: released as 1.5.4.** The owner requested this 1.5.4 release, the
 recorded decision in `apps/mac/release-readiness.json` remains approved
 (`"approved": true`), and the GitHub release workflow published the notarized
 build as GitHub Release
-[`macos-v1.5.1`](https://github.com/relayium/relayium/releases/tag/macos-v1.5.1):
+[`macos-v1.5.4`](https://github.com/relayium/relayium/releases/tag/macos-v1.5.4):
 a Developer ID-signed, Apple-notarized and stapled `Relayium.dmg` with its
 SHA-256 alongside. Public releases before the 1.4 series are universal; from the 1.4
 series on, every macOS build — Developer ID, Sparkle update, TestFlight, Mac App
@@ -182,7 +185,7 @@ from rewriting it. Its StoreKit build excludes Sparkle. See "Delivery status" in
 the root [`README.md`](../README.md) for what this release does and does not
 include.
 
-**Two macOS channels, and which one this is.** `1.5.1` is the Developer
+**Two macOS channels, and which one this is.** `1.5.4` is the Developer
 ID/GitHub download above. Internal TestFlight builds are separately recorded in
 the submission record below; a direct-download release does not establish that
 the same version is available in TestFlight, and a shared version number never
@@ -242,13 +245,18 @@ The macOS status above covers macOS only. iOS development resumed on
 2026-09-01 at version 0.3.0: internal TestFlight builds were used for
 development acceptance before the earlier pause, and neither the iOS app nor its share extension is publicly
 offered. There is no public App Store release and no Relayium download surface
-offers iOS. The current internal TestFlight build is **`0.5.2 (13)`**, App Store Connect
-build `c89ab922-5d93-4c5d-8499-ac8825c7208f`, source `bf46878ff`, uploaded once
-on 2026-10-18. It is `VALID` and `IN_BETA_TESTING` internally, notification off,
-export compliance cleared, absent from external testing and every Store
-selection. It carries negotiated two-part stored-link upload overlap; no WAN
-speed or force-quit recovery result is claimed. See the submission record for
-artifact and verification details. The earlier **`0.5.1 (12)`** remains: App
+offers iOS. The current internal TestFlight build is **`0.5.6 (17)`**, from source
+`7409f16e9f6885169ac881e8f8c50dde1b3a908f`. Apple build `32885198-9872-41b8-aadb-e6096f80ccb8` reports
+`VALID` and `IN_BETA_TESTING` in the internal group. The build folds long
+Device Inbox texts individually and keeps Copy available for the full text.
+The read-back preserved 42 earlier builds and all 10 Store selections.
+Device Inbox checks every two seconds while visible; long received text has
+Copy above and below its full body. Ask consent, pause and foreground-only
+transfers retain their existing behavior. This is discovery/status latency work,
+not a WAN throughput or physical-device acceptance claim. The earlier
+**`0.5.2 (13)`**, build `c89ab922-5d93-4c5d-8499-ac8825c7208f`, source
+`bf46878ff`, remains internal with negotiated two-part stored-link upload overlap.
+The earlier **`0.5.1 (12)`** remains: App
 Store Connect build `751dfe57-b6a4-46d7-b6bb-c0ad3b677012`, built from source
 `d23ca151c`, uploaded once on 2026-10-12 and read back at 15:53 UTC `VALID` and
 `IN_BETA_TESTING` in the existing internal group only — tester notification
@@ -1283,7 +1291,7 @@ Developer ID identity.
 
 `apps/ios/Relayium.xcodeproj` (bundle id `com.relayium.mac`,
 `IPHONEOS_DEPLOYMENT_TARGET = 16.0`, iPhone + iPad) is a SwiftUI app over the
-same local `RelayiumKit` package. **In development at 0.5.2 and not public** —
+same local `RelayiumKit` package. **In development at 0.5.6 and not public** —
 internal TestFlight builds were used for development acceptance before the
 earlier pause, but there is no public App Store listing and the website offers
 no iOS download.
@@ -2310,3 +2318,16 @@ row with a long device name; and the Arabic right-to-left layout of the two new
 sections specifically. What `swift test` does cover is the model's scope, race
 and cleanup behaviour, the presentation decisions, and the wiring that connects
 them.
+
+
+### Native file-send buffer wakeup
+
+Source `189c037f2` wakes the native file producer from WebRTC buffer-change
+notifications, with the existing 50 ms timer retained as fallback. Initial and
+replacement transports use one-shot subscriptions fenced by producer run and
+transport identity. Receive credit, frame encryption, resume and TURN selection
+are unchanged. Full Swift regression and two controlled 64 MiB TURN directions
+with complete SHA-256 verification passed. This is not a WAN speedup measurement.
+The optimization is included in the internal macOS and iOS TestFlight builds
+listed above. It takes effect after installing a build that contains source
+`189c037f2`. Windows 0.0.4 ships the separate native password-login change.

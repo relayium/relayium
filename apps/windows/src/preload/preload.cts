@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld("relayium", {
   onClientSupport: subscribe("relayium:client-support-changed"),
   auth: {
     start: invoke("relayium:auth-start"),
+    password: invoke("relayium:auth-password"),
     poll: invoke("relayium:auth-poll"),
     cancel: invoke("relayium:auth-cancel"),
     signOut: invoke("relayium:auth-sign-out"),
@@ -141,6 +142,9 @@ contextBridge.exposeInMainWorld("relayium", {
     end: invoke("relayium:stored-send-end"),
     cancel: invoke("relayium:stored-send-cancel"),
     history: invoke("relayium:stored-send-history"),
+    recovery: invoke("relayium:stored-send-recovery"),
+    resume: invoke("relayium:stored-send-resume"),
+    discardRecovery: invoke("relayium:stored-send-discard-recovery"),
     link: invoke("relayium:stored-send-link"),
     remove: invoke("relayium:stored-send-delete"),
     reconcile: invoke("relayium:stored-send-reconcile"),
@@ -157,6 +161,7 @@ contextBridge.exposeInMainWorld("relayium", {
   // no path, no token and no key on this surface, and `enable` opens a NATIVE
   // folder dialog in main rather than accepting a destination from here.
   inbox: {
+    markRead: invoke("relayium:inbox-mark-read"),
     state: invoke("relayium:inbox-state"),
     enable: invoke("relayium:inbox-enable"),
     disable: invoke("relayium:inbox-disable"),
@@ -213,6 +218,15 @@ contextBridge.exposeInMainWorld("relayium", {
   // encrypts. `feed` carries ciphertext the other way. A target is named by
   // central's device id; no key, no name and no path crosses either way.
   inboxSend: {
+    cancelDelivery: invoke("relayium:inbox-cancel-delivery"),
+    discardRecovery: invoke("relayium:inbox-send-discard-recovery"),
+    refreshTracked: invoke("relayium:inbox-send-refresh-tracked"),
+    recovery: invoke("relayium:inbox-send-recovery"),
+    resume: invoke("relayium:inbox-send-resume"),
+    history: invoke("relayium:inbox-sent-history"),
+    open: invoke("relayium:inbox-sent-open"),
+    copy: invoke("relayium:inbox-sent-copy"),
+    forget: invoke("relayium:inbox-sent-forget"),
     targets: invoke("relayium:inbox-send-targets"),
     start: invoke("relayium:inbox-send-start"),
     feed: invoke("relayium:inbox-send-feed"),

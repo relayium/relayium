@@ -224,11 +224,12 @@ struct TransferLinkPane: View {
         if let sas = link.sasToCompare {
             verification(sas)
         } else {
+            transfers
             composer
             fileActions
             droppedBatch
             transcript
-            transfers
+            transfers(history: true)
         }
     }
 
@@ -503,16 +504,14 @@ struct TransferLinkPane: View {
         }
     }
 
-    /// The same rule, for the same reason — see `transcript`.
-    ///
-    /// `armedFiles` belongs to the observed `link` rather than to the nested
-    /// model, so it was never the broken half; it moves down with the batches
-    /// anyway, because the two halves of one suppression decision must not live
-    /// on opposite sides of an observation boundary.
+    /// Both transfer sections observe the file model themselves, so a new
+    /// offer can move into view even while the connection stays unchanged.
+    private var transfers: some View { transfers(history: false) }
+
     @ViewBuilder
-    private var transfers: some View {
+    private func transfers(history: Bool) -> some View {
         if let files = link.fileModel {
-            LinkTransferListView(model: files, link: link)
+            LinkTransferListView(model: files, link: link, history: history)
         }
     }
 
@@ -526,8 +525,9 @@ struct TransferLinkPane: View {
             // The transcript and the transfer list outlive the link on purpose:
             // a committed batch's paths and a failed one's manifest are what the
             // user still needs, exactly as the legacy terminal states keep theirs.
-            transcript
             transfers
+            transcript
+            transfers(history: true)
         }
     }
 
@@ -872,43 +872,36 @@ struct LinkTransferListView: View {
     @ObservedObject var model: LinkFilePresentationModel
     @ObservedObject var link: LinkWorkspaceModel
 
-    /// **The empty state is suppressed HERE, not by the parent.**
-    ///
-    /// Unlike the transcript this list has a visible heading, so "no batches"
-    /// genuinely has to draw nothing rather than draw an empty container. That
-    /// decision belongs to this view because this view is the one that observes
-    /// `model`: the same test asked from `TransferLinkPane` is answered once and
-    /// then never re-asked, and the first batch of a stable link goes unrendered.
-    /// See `TransferLinkPane.transcript` for the whole shape of that fault.
-    ///
-    /// Both halves are the same condition the parent used to hold, with the same
-    /// meaning: a batch the lane knows about, or one the user armed and the
-    /// verification has not released yet.
+    let history: Bool
+
     @ViewBuilder
     var body: some View {
-        if !model.batches.isEmpty || !link.armedFiles.isEmpty {
-            list
-        }
-    }
-
-    private var list: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.t(.linkTransfersHeading)).font(.callout.weight(.semibold))
-                .foregroundStyle(Palette.text)
-            if !link.armedFiles.isEmpty {
-                // A batch the lane has not seen. Named as its own state rather
-                // than drawn as queued: queued means the lane took it.
-                Text(L10n.t(.linkBatchArmed))
-                    .font(.subheadline).foregroundStyle(Palette.textSecondary)
-                    .accessibilityIdentifier("link-batch-armed")
+        let batches = model.batchesNewestFirst
+        let offered = batches.filter { $0.state == .offered }
+        let moving = batches.filter { $0.state == .transferring }
+        let active = offered + moving
+        let featured = active.isEmpty ? Array(batches.prefix(1)) : active
+        let featuredIDs = Set(featured.map(\.id))
+        let rows = history ? batches.filter { !featuredIDs.contains($0.id) } : featured
+        let showsArmed = !history && !link.armedFiles.isEmpty
+        if !rows.isEmpty || showsArmed {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L10n.t(history ? .macLinkOtherTransfers : .linkTransfersHeading))
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Palette.text)
+                if showsArmed {
+                    Text(L10n.t(.linkBatchArmed))
+                        .font(.subheadline).foregroundStyle(Palette.textSecondary)
+                        .accessibilityIdentifier("link-batch-armed")
+                }
+                ForEach(rows) { batch in
+                    row(batch)
+                }
             }
-            ForEach(model.batchesNewestFirst) { batch in
-                row(batch)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(history ? "link-transfer-history" : "link-transfers")
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("link-transfers")
     }
 
     @ViewBuilder

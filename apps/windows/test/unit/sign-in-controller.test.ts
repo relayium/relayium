@@ -522,3 +522,37 @@ describe("the countdown reflects main's remaining deadline", () => {
     expect(d.controller.phase).toMatchObject({ kind: "failed" });
   });
 });
+
+
+describe("in-app password sign-in", () => {
+  it("calls native login without opening browser authorization", async () => {
+    const sent: unknown[] = [];
+    const h = drive({ password: async (payload) => { sent.push(payload); return { status: "ok", accountEmail: "a@b.c" }; },
+      state: async () => ({ ...SIGNED_OUT, signedIn: true, accountEmail: "a@b.c" }) });
+    await h.controller.signInWithPassword("a@b.c", "password");
+    expect(sent).toEqual([{ nonce: "nonce-1", email: "a@b.c", password: "password" }]);
+    expect(h.calls.start).toBe(0);
+    expect(h.calls.poll).toBe(0);
+    expect(h.controller.phase.kind).toBe("signedIn");
+  });
+
+  it.each(["invalid-credentials", "email-unverified", "pending-deletion", "rate-limited"] as const)(
+    "renders the closed %s failure", async (status) => {
+      const h = drive({ password: async () => ({ status }) });
+      await h.controller.signInWithPassword("a@b.c", "password");
+      expect(h.controller.phase).toEqual({ kind: "failed", reason: status });
+    });
+
+  it("does not render a late password success after cancellation", async () => {
+    const barrier = deferred<{ status: "ok" }>();
+    const h = drive({ password: async () => barrier.promise });
+    const pending = h.controller.signInWithPassword("a@b.c", "password");
+    expect(h.controller.phase).toEqual({ kind: "starting", method: "password" });
+    await h.controller.cancel();
+    const states = h.calls.state;
+    barrier.resolve({ status: "ok" });
+    await pending;
+    expect(h.controller.phase.kind).toBe("signedOut");
+    expect(h.calls.state).toBe(states);
+  });
+});

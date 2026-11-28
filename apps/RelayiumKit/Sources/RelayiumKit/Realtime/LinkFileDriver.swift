@@ -63,8 +63,19 @@ public protocol LinkLiveTransport: AnyObject {
     /// this driver never calls it while holding a lock of its own.
     func send(_ bytes: [UInt8], on lane: LinkLane) throws
     func bufferedAmount(on lane: LinkLane) -> UInt64
+    /// Non-blocking one-shot hint. Registration/cancellation use only a leaf
+    /// lock, never a transport queue, and registration does not call `wake`.
+    /// A captured callback may still arrive after cancellation. Transports that
+    /// cannot observe drainage retain polling through the default implementation.
+    func observeFileBufferDrain(whenAtMost threshold: UInt64,
+                                wake: @escaping () -> Void) -> () -> Void
     var isClosed: Bool { get }
     func close()
+}
+
+public extension LinkLiveTransport {
+    func observeFileBufferDrain(whenAtMost threshold: UInt64,
+                                wake: @escaping () -> Void) -> () -> Void { {} }
 }
 
 extension WebRTCLinkTransport: LinkLiveTransport {}
@@ -347,6 +358,7 @@ public final class LinkFileDriver: @unchecked Sendable {
     /// past.
     private var transport: LinkLiveTransport?
     private var currentToken: ObjectIdentifier?
+    private var cancelBufferDrain: (() -> Void)?
     /// Bumped on every transport change. Names the wire generation an emission
     /// belongs to and the drain that is allowed to carry it.
     private var epoch = 0
@@ -765,6 +777,7 @@ public final class LinkFileDriver: @unchecked Sendable {
         // First, and before any effect: from here nothing may be written to the
         // transport that is gone, and no frame from it is current any more.
         epoch += 1
+        cancelBufferDrainLocked()
         transport = nil
         currentToken = nil
         outbox.removeAll()
@@ -826,6 +839,7 @@ public final class LinkFileDriver: @unchecked Sendable {
         epoch += 1
         let mine = epoch
         outbox.removeAll()
+        cancelBufferDrainLocked()
         transport = live
         currentToken = ObjectIdentifier(live)
         frameCeiling = ceiling
@@ -850,6 +864,7 @@ public final class LinkFileDriver: @unchecked Sendable {
         withState {
             guard !linkEnded else { return }
             linkEnded = true
+            cancelBufferDrainLocked()
             epoch += 1
             transport = nil
             currentToken = nil
@@ -1472,11 +1487,9 @@ public final class LinkFileDriver: @unchecked Sendable {
     /// transport's own buffer is above the high-water mark it parks on a scheduled
     /// wake-up.
     ///
-    /// That polling is deliberate and it is the current WebRTC driver's limit
-    /// rather than a preference: there is no low-buffer callback to subscribe to,
-    /// so the policy is `sendBufferPollInterval` against `sendBufferHighWater`, and
-    /// a real `onBufferedAmountLow` would replace the timer without changing
-    /// anything else here. Every poll is correlated to `run`, so a wake-up for a
+    /// A one-shot buffer-drain notification wakes the pump promptly. The timer
+    /// remains a fallback for missing callbacks and transports without observers.
+    /// Every notification and poll is correlated to `run`, so a wake-up for a
     /// producer that has been released can neither start a second pump nor revive
     /// a stopped attempt.
     private func pumpProducer(run: Int, batch: Int, attempt: Int) {
@@ -1561,6 +1574,7 @@ public final class LinkFileDriver: @unchecked Sendable {
     }
 
     private func parkProducer(run: Int, batch: Int, attempt: Int) {
+        var watched: (LinkLiveTransport, ObjectIdentifier)?
         withState {
             guard var current = producerRun, current.run == run, !fileTerminal, !linkEnded else {
                 if producerRun?.run == run { producerRun?.pumping = false }
@@ -1568,6 +1582,13 @@ public final class LinkFileDriver: @unchecked Sendable {
             }
             current.pumping = false
             producerRun = current
+            cancelBufferDrainLocked()
+            if !current.paused, let live = transport, let token = currentToken {
+                watched = (live, token)
+                cancelBufferDrain = live.observeFileBufferDrain(whenAtMost: sendBufferHighWater) { [weak self] in
+                    self?.queueBufferWake(run: run, batch: batch, attempt: attempt, token: token)
+                }
+            }
             arm(.producerPoll(run: run), after: sendBufferPollInterval) { [weak self] token in
                 guard let self else { return }
                 let go: Bool = self.withState {
@@ -1576,6 +1597,7 @@ public final class LinkFileDriver: @unchecked Sendable {
                     guard var current = self.producerRun, current.run == run,
                           !current.pumping, !current.paused, !current.stopRequested,
                           !self.fileTerminal, !self.linkEnded else { return false }
+                    self.cancelBufferDrainLocked()
                     current.pumping = true
                     self.producerRun = current
                     return true
@@ -1583,7 +1605,38 @@ public final class LinkFileDriver: @unchecked Sendable {
                 if go { self.producerQueue.async { self.pumpProducer(run: run, batch: batch, attempt: attempt) } }
             }
         }
+        // Subscribe BEFORE rechecking. Drainage between the original high-water
+        // read and subscription must not leave us waiting for another event.
+        // This blocking transport read is deliberately outside `state`.
+        if let (live, token) = watched, live.bufferedAmount(on: .file) <= sendBufferHighWater {
+            queueBufferWake(run: run, batch: batch, attempt: attempt, token: token)
+        }
     }
+
+    private func queueBufferWake(run: Int, batch: Int, attempt: Int, token: ObjectIdentifier) {
+        producerQueue.async { [weak self] in
+            guard let self else { return }
+            let go = self.withState {
+                guard self.currentToken == token,
+                      var current = self.producerRun, current.run == run,
+                      !current.pumping, !current.paused, !current.stopRequested,
+                      !self.fileTerminal, !self.linkEnded else { return false }
+                self.cancel(.producerPoll(run: run))
+                self.cancelBufferDrainLocked()
+                current.pumping = true
+                self.producerRun = current
+                return true
+            }
+            if go { self.pumpProducer(run: run, batch: batch, attempt: attempt) }
+        }
+    }
+
+    private func cancelBufferDrainLocked() {
+        cancelBufferDrain?()
+        cancelBufferDrain = nil
+    }
+
+    deinit { cancelBufferDrain?() }
 
     private func stopProducerLocked(batch: Int, attempt: Int) {
         guard var current = producerRun, current.batch == batch, current.attempt == attempt else {
@@ -1593,6 +1646,7 @@ public final class LinkFileDriver: @unchecked Sendable {
         }
         current.stopRequested = true
         producerRun = current
+        cancelBufferDrainLocked()
         cancel(.producerPoll(run: current.run))
         guard !current.pumping else { return }   // the pump reports when it lands
         producerRun = nil
@@ -1610,6 +1664,7 @@ public final class LinkFileDriver: @unchecked Sendable {
             return
         }
         cancel(.producerPoll(run: run))
+        cancelBufferDrainLocked()
         guard !current.pumping, !current.stopRequested else {
             producerRun = current
             return
@@ -1620,6 +1675,7 @@ public final class LinkFileDriver: @unchecked Sendable {
     }
 
     private func releaseProducerLocked() {
+        cancelBufferDrainLocked()
         guard let current = producerRun else { return }
         cancel(.producerPoll(run: current.run))
         producerRun = nil

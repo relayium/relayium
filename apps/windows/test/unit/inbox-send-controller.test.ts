@@ -123,6 +123,24 @@ function fileOf(name: string, bytes: number): File {
 }
 
 describe("choosing what and where", () => {
+  it("clears a draft when switching devices, preserves it for the same device, and keeps removed peers read-only", async () => {
+    const h = harness(); await h.controller.refreshTargets(); h.controller.choosePeer("dev-a");
+    h.controller.pick([fileOf("private.txt", 12)]); h.controller.message = "for A";
+    h.controller.choosePeer("dev-a"); expect(h.controller.files).toHaveLength(1);
+    h.controller.choosePeer("dev-b"); expect(h.controller.files).toEqual([]); expect(h.controller.message).toBe("");
+    expect(h.controller.selected).toEqual([]); expect(h.controller.conversationPeer).toBe("dev-b");
+    h.controller.choosePeer("dev-a"); expect(h.controller.selected).toEqual(["dev-a"]);
+    h.controller.dispose();
+  });
+
+  it("drops a sent body and delayed reads immediately on account replacement", async () => {
+    let resolve!: (answer: { text: string }) => void;
+    const h = harness({ open: () => new Promise((r) => { resolve = r; }), history: async () => ({ entries: [] }) });
+    const opening = h.controller.openSent("old-job");
+    h.state(VIEW(2)); resolve({ text: "previous account secret" }); await opening;
+    expect(h.controller.openSentText).toBe(""); expect(h.controller.openSentID).toBeNull();
+    expect(h.controller.history).toEqual([]); h.controller.dispose();
+  });
   it("reads the device list and drops a selection that stopped being eligible", async () => {
     const h = harness();
     await h.controller.refreshTargets();

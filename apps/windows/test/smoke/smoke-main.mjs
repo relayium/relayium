@@ -677,7 +677,7 @@ async function main() {
   // Every declared channel has a handler. A channel the renderer can call and
   // nothing answers is a hang, not an error.
   const declared = [
-    "relayium:app-info", "relayium:auth-start", "relayium:auth-poll",
+    "relayium:app-info", "relayium:auth-start", "relayium:auth-password", "relayium:auth-poll",
     "relayium:auth-cancel", "relayium:auth-sign-out", "relayium:auth-state",
     "relayium:receive-open", "relayium:receive-begin", "relayium:receive-write",
     "relayium:receive-finish", "relayium:receive-cancel", "relayium:receive-publish",
@@ -729,6 +729,12 @@ async function main() {
     // that deletes that record: turning receiving off and signing out leave it
     // alone, exactly as they leave the message vault alone.
     "relayium:inbox-history", "relayium:inbox-forget-delivery",
+    "relayium:inbox-sent-history", "relayium:inbox-sent-open", "relayium:inbox-sent-copy", "relayium:inbox-sent-forget",
+    "relayium:inbox-send-recovery", "relayium:inbox-send-resume",
+    "relayium:inbox-mark-read",
+    "relayium:inbox-send-refresh-tracked",
+    "relayium:inbox-send-discard-recovery",
+    "relayium:inbox-cancel-delivery",
     // Device Inbox SEND. A target is named by central's DEVICE ID and nothing
     // else: the device's public key, its key id and its algorithm all stay in
     // main, because a renderer holding a target's key could seal to it. The
@@ -745,6 +751,7 @@ async function main() {
     "relayium:stored-send-start", "relayium:stored-send-feed", "relayium:stored-send-end",
     "relayium:stored-send-cancel", "relayium:stored-send-history", "relayium:stored-send-link",
     "relayium:stored-send-delete", "relayium:stored-send-reconcile",
+    "relayium:stored-send-recovery", "relayium:stored-send-resume", "relayium:stored-send-discard-recovery",
     // Copying a link happens in MAIN, for the same reason the Inbox message
     // copy does: `window.ts` denies the renderer clipboard permission.
     "relayium:stored-send-copy-link",
@@ -765,6 +772,8 @@ async function main() {
     "relayium:update-state", "relayium:update-act",
     "relayium:update-residue", "relayium:update-notes",
     "relayium:inbox-delete-message", "relayium:inbox-rename", "relayium:inbox-wake",
+    // Boolean visibility hint; main owns cadence and expires an unrenewed hint.
+    "relayium:inbox-visible",
     "relayium:inbox-release-retained",
     // The help's one journey out. A SCREEN and a language, never an address:
     // main owns the slug table and composes the URL on the product SITE's

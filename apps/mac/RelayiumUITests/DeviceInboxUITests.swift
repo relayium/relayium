@@ -573,8 +573,6 @@ final class DeviceInboxUITests: XCTestCase {
             XCTAssertTrue(element("inbox-policy-\(choice)", in: window).exists,
                           "the \(choice) receiving choice is not on the destination")
         }
-        XCTAssertTrue(revealed("inbox-conversations", in: window).exists,
-                      "the destination has no v3 conversation home")
         XCTAssertTrue(revealed("inbox-send", in: window).exists,
                       "the destination has no send-device section")
         XCTAssertTrue(revealed("inbox-send-refresh", in: window).exists,
@@ -899,10 +897,9 @@ final class DeviceInboxUITests: XCTestCase {
     /// claims nothing, then a found delivery whose saved claim is the status
     /// line's.**
     ///
-    /// The fixture stretches the automatic schedule to an hour, so nothing
-    /// below can be explained by the loop's own timer: each pass after launch is
-    /// one this test pressed for, and each is held for a moment so Checking… is
-    /// on screen long enough to read. No network is involved.
+    /// The fixture keeps foreground polling active but advances its delivery
+    /// script only when Check now enters Checking. Each explicit pending read
+    /// is held so Checking remains visible. No network is involved.
     func testCheckNowShowsCheckingThenNothingNewThenDefersToTheReceipt() {
         launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-check"])
         let window = openDeviceInboxDestination()
@@ -1120,8 +1117,8 @@ final class DeviceInboxUITests: XCTestCase {
         second.click()
         // Wait on a landmark the LIST has and the conversation page does not, so
         // the absences below are read after the transition rather than during it.
-        XCTAssertTrue(revealed("inbox-conversations", in: window, timeout: 20).exists,
-                      "deleting the last item did not return to the conversation list")
+        XCTAssertTrue(revealed("inbox-send", in: window, timeout: 20).exists,
+                      "deleting the last item did not return to the device list")
         XCTAssertFalse(element("inbox-entry-menu", in: window).exists,
                        "the deleted row is still on screen")
         XCTAssertFalse(element("inbox-timeline", in: window).exists,

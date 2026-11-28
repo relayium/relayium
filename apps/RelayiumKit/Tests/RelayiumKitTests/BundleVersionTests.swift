@@ -53,10 +53,9 @@ final class BundleVersionTests: XCTestCase {
 
     /// macOS: two products, each with its Share extension.
     func testTheMacAppAndItsExtensionShipOneVersion() throws {
-        // Fresh 2026-11-18 inventories confirm 1.5.1 (49) consumed.
-        // Foreground Inbox discovery advances both channels to 1.5.2 (50).
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.5.2", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "50", occurrences: 10)
+        // Both macOS channels carry the native transfer wakeup in 1.5.3 (51).
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.5.3", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "51", occurrences: 10)
     }
 
     /// macOS: both shipped products and both Share extensions are Apple Silicon
@@ -131,8 +130,8 @@ final class BundleVersionTests: XCTestCase {
         // 0.5.0 App Store version still in PREPARE_FOR_SUBMISSION (root
         // provider readback 2026-10-12). The next internal candidate takes a
         // new visible version, 0.5.1 (12); it did not touch that draft.
-        // Provider 2026-11-18 confirms build13 consumed; Inbox discovery ships14.
-        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.5.3", occurrences: 4)
-        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "14", occurrences: 4)
+        // The private iPad candidate consumed 0.5.4 (15).
+        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.5.5", occurrences: 4)
+        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "16", occurrences: 4)
     }
 }

@@ -1,15 +1,6 @@
-// The native sign-in flow: RFC 8628 device authorization, against the same two
-// endpoints the Go CLI and the macOS app already use.
-//
-// ## Why not the web client's cookie session
-//
-// `web/src/lib/auth.svelte.ts` authenticates with an `HttpOnly` cookie set
-// `SameSite=Lax` on an HTTPS origin, and every call it makes passes
-// `credentials: "include"`. None of that is reusable here: a desktop client has
-// no browser cookie jar bound to that origin, and a renderer that tried to
-// inherit one would be asking for the cookie to be readable — the precise
-// property `HttpOnly` exists to deny. The bearer flow below is the path the
-// server already offers non-browser clients, and it is the correct one.
+// Optional RFC 8628 browser authorization, also used by the CLI. The primary
+// Windows email/password flow uses the existing native bearer endpoint in
+// password-auth.ts. Both keep credentials in main, outside the renderer.
 //
 // ## The two rules that are easy to get wrong
 //

@@ -29,6 +29,8 @@
 -->
 <script lang="ts">
   import { onMount } from "svelte";
+  import ConversationHistory from "../inbox/ConversationHistory.svelte";
+  import { conversationRows } from "../inbox/conversation.js";
   import { t } from "../i18n/index.svelte.js";
   import Card from "../shell/Card.svelte";
   import { sendGate } from "../send/send-gate.svelte.js";
@@ -72,7 +74,7 @@
   }: { inbox: InboxController; send: InboxSendController; onSignIn?: () => void } = $props();
 
   onMount(() => {
-    const update = () => inbox.setVisible(!document.hidden);
+    const update = () => { inbox.setVisible(!document.hidden); if (!document.hidden) void send.refreshTracked(); };
     update();
     const timer = setInterval(update, 10_000);
     document.addEventListener("visibilitychange", update);
@@ -224,6 +226,7 @@
    * fix itself when that device next enrols a key.
    */
   function refusalText(refusal: string | null): string {
+    if (refusal === "no-task") return t("inboxDeliveryRemoved");
     if (refusal === "auto_receive_disabled") return t("inboxSendTargetOff");
     if (refusal === "device_inbox_revoked") return t("inboxSendTargetRevoked");
     if (refusal === "no_active_key") return t("inboxSendTargetNoKey");
@@ -279,20 +282,23 @@
   $effect(() => {
     void inbox.refreshLists();
     void send.refreshTargets();
+    void send.refreshHistory();
   });
 
-  let copyState = $state<{ id: string; ok: boolean } | null>(null);
-  async function copyOpen(): Promise<void> {
-    const id = inbox.openId;
-    if (id === null) return;
-    const ok = await inbox.copy(id);
-    copyState = { id, ok };
-    // A success fades; a failure stays, because the user has to act on it.
-    if (!ok) return;
-    setTimeout(() => {
-      if (copyState?.id === id) copyState = null;
-    }, 1500);
-  }
+  const rows = $derived(conversationRows(inbox.messages, Object.values(inbox.named), send.history));
+  const peers = $derived.by(() => {
+    const ids = new Set([...send.targets.map((target) => target.deviceID), ...rows.map((row) => row.peer)]);
+    return [...ids].map((id) => {
+      const target = send.targets.find((target) => target.deviceID === id);
+      const remembered = Object.hasOwn(send.peerNames, id) ? send.peerNames[id] : null;
+      return { id, name: id === "" ? t("conversationLegacy") : target?.name || `${remembered || id.slice(-6)} · ${t("conversationRemoved")}`,
+        eligible: target?.eligible === true, refusal: target?.refusal ?? null };
+    });
+  });
+  const peerName = $derived(peers.find((peer) => peer.id === send.conversationPeer)?.name ?? t("conversationHistory"));
+  const activeTarget = $derived(!send.targetsUnavailable && send.selected.length === 1 && send.selected[0] === send.conversationPeer ?
+    send.targets.find((target) => target.deviceID === send.conversationPeer && target.eligible) : undefined);
+
 </script>
 
 <h1>{t("inboxTitle")}</h1>
@@ -516,47 +522,22 @@
     </Card>
   {/if}
 
-  <!-- Messages. Kept until the user deletes them: turning receiving off, or
-       signing out, never removes one. -->
-  <Card title={t("inboxMessagesHeading")}>
-    {#if inbox.messages.length === 0}
-      <p class="dim" data-test="inbox-messages-empty">{t("inboxMessagesEmpty")}</p>
-    {:else}
-      <ul class="list" data-test="inbox-messages">
-        {#each inbox.messages as message (message.id)}
-          <li>
-            <div class="who">
-              <span>{t("inboxMessageItem")}</span>
-              <span class="dim small">{when(message.receivedAt)}</span>
-            </div>
-            <div class="row">
-              <button type="button" data-test="inbox-open" onclick={() => void inbox.open(message.id)}>
-                {inbox.openId === message.id ? t("inboxClose") : t("inboxOpen")}
-              </button>
-              <button class="danger" type="button" data-test="inbox-delete" onclick={() => void inbox.remove(message.id)}>
-                {t("inboxDelete")}
-              </button>
-            </div>
-            {#if inbox.openId === message.id}
-              <div class="body" data-test="inbox-message-body">
-                <p>{inbox.openText}</p>
-                <button type="button" data-test="inbox-copy" onclick={() => void copyOpen()}>
-                  {copyState?.id === message.id
-                    ? copyState.ok
-                      ? t("inboxCopied")
-                      : t("inboxCopyFailed")
-                    : t("inboxCopy")}
-                </button>
-                {#if copyState?.id === message.id && !copyState.ok}
-                  <p class="dim small" data-test="inbox-copy-failed">{t("inboxCopyFailedBody")}</p>
-                {/if}
-              </div>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-    {/if}
-    <p class="dim small">{t("inboxMessageKept")}</p>
+  <Card title={t("conversationDevices")}>
+    <p class="dim">{t("conversationChoose")}</p>
+    <div class="peers" data-test="conversation-devices">
+      {#each peers as peer (peer.id)}
+        <button type="button" data-test="conversation-device" data-peer={peer.id}
+          data-eligible={peer.eligible}
+          aria-pressed={send.conversationPeer === peer.id} disabled={send.busy} onclick={() => send.choosePeer(peer.id)}>
+          {peer.name}
+          {#if rows.some((row) => row.peer === peer.id && row.unread)}<span class="dim small">{t("conversationUnread", { count: rows.filter((row) => row.peer === peer.id && row.unread).length })}</span>{/if}
+        </button>
+        {#if peer.refusal}<span class="dim small" data-test="inbox-send-target-refusal">{refusalText(peer.refusal)}</span>{/if}
+      {/each}
+    </div>
+    {#if peers.length === 0 && !send.targetsUnavailable}<p class="dim">{t("inboxSendNoTargets")}</p>{/if}
+    {#if send.targetsUnavailable}<p class="problem">{t("inboxSendTargetsUnavailable")}</p>{/if}
+    <button type="button" data-test="inbox-send-refresh" onclick={() => { void send.refreshTargets(); void send.refreshHistory(); void inbox.refreshLists(); }}>{t("inboxSendRefresh")}</button>
   </Card>
 
   <!--
@@ -571,7 +552,9 @@
     Each target is its own delivery with its own key, so each has its own line
     and its own outcome. One device refusing is not a reason to abandon another.
   -->
-  <Card title={t("inboxSendHeading")}>
+  {#if send.conversationPeer !== null}
+  <Card title={peerName}>
+    {#if activeTarget}
     <p class="dim">{t("inboxSendBody")}</p>
 
     <!-- Files or a message: one delivery is one kind, because the manifest
@@ -699,90 +682,70 @@
       ></textarea>
     {/if}
 
-    <!-- Your devices. A refusal is central's own verdict, said as a sentence:
-         a greyed row with no reason is how a person ends up waiting for a
-         delivery that was never going to be accepted. -->
-    <fieldset class="policy">
-      <legend>{t("inboxSendTargetsHeading")}</legend>
-      {#if send.targetsUnavailable}
-        <p class="problem" data-test="inbox-send-targets-unavailable">
-          {send.targetsRefusal === "signed-out"
-            ? t("inboxSendSignedOut")
-            : t("inboxSendTargetsUnavailable")}
-        </p>
-        <!-- The action has to be the one that RESOLVES what was just said.
-             This branch is reachable when the account goes away mid-session,
-             while the page is already open, and Refresh cannot end being
-             signed out however many times it is pressed. -->
-        {#if send.targetsRefusal === "signed-out" && onSignIn}
-          <button class="primary" type="button" data-test="inbox-send-sign-in" onclick={onSignIn}>
-            {t("gateSignIn")}
-          </button>
-        {:else}
-          <button type="button" data-test="inbox-send-refresh" onclick={() => void send.refreshTargets()}>
-            {t("inboxSendRefresh")}
-          </button>
-        {/if}
-      {:else if send.targets.length === 0}
-        <p class="dim" data-test="inbox-send-no-targets">{t("inboxSendNoTargets")}</p>
-        <button type="button" data-test="inbox-send-refresh" onclick={() => void send.refreshTargets()}>
-          {t("inboxSendRefresh")}
+    {@const currentStatus = send.status[activeTarget.deviceID] ?? null}
+    {#if currentStatus && currentStatus.phase !== "idle"}
+      <p class="dim" data-test="inbox-send-status" data-device={activeTarget.deviceID} data-phase={currentStatus.phase}
+        {...currentStatus.view?.kind === "delivered" ? { "data-delivery": currentStatus.view.state } : {}}>{statusText(currentStatus)}</p>
+      {#if currentStatus.view?.kind === "unknown"}<p class="dim small">{t("inboxSendUnknownBody")}</p>{/if}
+      {#if currentStatus.view?.kind === "refused" && currentStatus.view.orphanedObject}<p class="dim small">{t("inboxSendOrphan")}</p>{/if}
+    {/if}
+
+
+    <div class="row">
+      {#if send.busy}
+        <button type="button" data-test="inbox-send-cancel" onclick={() => void send.cancel()}>
+          {t("inboxSendCancel")}
         </button>
       {:else}
-        {#each send.targets as target (target.deviceID)}
-          {@const state = send.status[target.deviceID] ?? null}
-          <div class="choice">
-            <input
-              type="checkbox"
-              id={`inbox-target-${target.deviceID}`}
-              data-test="inbox-send-target"
-              data-device={target.deviceID}
-              checked={send.selected.includes(target.deviceID)}
-              disabled={send.busy || !target.eligible}
-              onchange={() => send.toggle(target.deviceID)}
-            />
-            <div>
-              <label for={`inbox-target-${target.deviceID}`}>
-                {target.name === "" ? target.deviceID : target.name}
-              </label>
-              {#if !target.eligible}
-                <p class="dim small" data-test="inbox-send-target-refusal">{refusalText(target.refusal)}</p>
-              {/if}
-              {#if state !== null && state.phase !== "idle"}
-                <!-- The PHASE is carried as data, not inferred from the
-                     sentence. A fixture that waited on the text alone matched
-                     "Waiting" as readily as an outcome, which is a barrier that
-                     passes before the thing it is waiting for. -->
-                <p
-                  class="dim small"
-                  data-test="inbox-send-status"
-                  data-device={target.deviceID}
-                  data-phase={state.phase}
-                  {...state.view?.kind === "delivered" ? { "data-delivery": state.view.state } : {}}
-                >
-                  {statusText(state)}
-                </p>
-                {#if state.view?.kind === "unknown"}
-                  <p class="dim small" data-test="inbox-send-unknown-body">{t("inboxSendUnknownBody")}</p>
-                  <button
-                    type="button"
-                    data-test="inbox-send-converge"
-                    disabled={send.checking(target.deviceID)}
-                    onclick={() => void send.converge(target.deviceID)}
-                  >
-                    {t("inboxSendCheckAgain")}
-                  </button>
-                {/if}
-                {#if state.view?.kind === "refused" && state.view.orphanedObject}
-                  <p class="dim small" data-test="inbox-send-orphan">{t("inboxSendOrphan")}</p>
-                {/if}
-              {/if}
-            </div>
-          </div>
-        {/each}
-      {/if}
-    </fieldset>
+        <!--
+          The page's own admission, not just main's.
 
+          Main refuses a new delivery while a quit is being decided, but the
+          control has to say so too: a button that looks live and then answers
+          "not right now" is a worse quit than one that is visibly held. The
+          TICKET is what makes it correct rather than cosmetic — permission is
+          taken when the person presses, and a fence between the press and the
+          delivery actually starting invalidates it, so an intent formed before
+          a question they have since answered cannot go out afterwards.
+        -->
+        <button
+          type="button"
+          data-test="inbox-send-start"
+          disabled={!send.ready || sendGate.fenced}
+          onclick={() => sendGate.start(() => void send.send())}
+        >
+          {t("inboxSendStart")}
+        </button>
+        <button type="button" data-test="inbox-send-clear" onclick={() => send.clear()}>
+          {t("inboxSendClear")}
+        </button>
+      {/if}
+    </div>
+    {:else}<p class="dim" data-test="conversation-readonly">{t("conversationReadOnly")}</p>{/if}
+    <ConversationHistory {inbox} {send} />
+  </Card>
+  {/if}
+
+  {#if send.recoveries.length > 0 || send.recoveryUnavailable}
+    <Card title={t("inboxRecoveryHeading")}>
+      {#if send.recoveryUnavailable}<p class="problem">{t("conversationUnavailable")}</p>{/if}
+      <ul class="list" data-test="inbox-send-recovery">
+        {#each send.recoveries as entry (entry.jobId)}
+          <li>
+            <strong>{send.targets.find((target) => target.deviceID === entry.peerID)?.name || t("conversationRemoved")}</strong>
+            <p class="dim small">{t(entry.phase === "cleanup" ? "sendRecoveryCleanup" : entry.phase === "preparing" ? "inboxRecoveryIncomplete" : entry.phase === "unconfirmed" ? "conversationUnconfirmed" : "inboxRecoveryReady")}</p>
+            <button type="button" data-test="inbox-recovery-resume" disabled={send.busy || send.discarding !== null || !entry.canResume}
+              onclick={() => void send.resumeRecovery(entry)}>{t(entry.phase === "unconfirmed" ? "inboxSendCheckAgain" : "inboxRecoveryResume")}</button>
+            {#if entry.canDiscard}<button type="button" data-test="inbox-recovery-discard" disabled={send.busy || send.discarding !== null} onclick={() => void send.discardRecovery(entry)}>{t("sendRecoveryDiscard")}</button>{/if}
+          </li>
+        {/each}
+      </ul>
+      {#if send.recoveryNotice}<p role="status">{t(send.recoveryNotice === "discarded" ? "sendRecoveryDiscarded" : "sendRecoveryDiscardFailed")}</p>{/if}
+    </Card>
+  {/if}
+
+  {#if send.unresolved.length > 0}
+  <Card title={t("inboxSendUnresolvedHeading")}>
     <!--
       Deliveries nobody can account for.
 
@@ -817,124 +780,22 @@
       </div>
     {/if}
 
-    <div class="row">
-      {#if send.busy}
-        <button type="button" data-test="inbox-send-cancel" onclick={() => void send.cancel()}>
-          {t("inboxSendCancel")}
-        </button>
-      {:else}
-        <!--
-          The page's own admission, not just main's.
-
-          Main refuses a new delivery while a quit is being decided, but the
-          control has to say so too: a button that looks live and then answers
-          "not right now" is a worse quit than one that is visibly held. The
-          TICKET is what makes it correct rather than cosmetic — permission is
-          taken when the person presses, and a fence between the press and the
-          delivery actually starting invalidates it, so an intent formed before
-          a question they have since answered cannot go out afterwards.
-        -->
-        <button
-          type="button"
-          data-test="inbox-send-start"
-          disabled={!send.ready || sendGate.fenced}
-          onclick={() => sendGate.start(() => void send.send())}
-        >
-          {t("inboxSendStart")}
-        </button>
-        <button type="button" data-test="inbox-send-clear" onclick={() => send.clear()}>
-          {t("inboxSendClear")}
-        </button>
-      {/if}
-    </div>
   </Card>
+  {/if}
 
-  <!--
-    What has arrived.
-
-    Counts and outcomes from the delivery journal, and the NAMES beside them
-    when this delivery has them — captured while it was received, from the
-    manifest, because the journal carries no names by design and re-reading the
-    folder would report whatever is in it now rather than what arrived.
-
-    A delivery with no names says so. An empty row would read as an empty
-    delivery, which is the one thing it must never be mistaken for.
-  -->
-  <Card title={t("inboxReceiptsHeading")}>
-    {#if inbox.receiptsUnavailable}
-      <p class="problem" data-test="inbox-receipts-unavailable">{t("inboxReceiptsUnavailable")}</p>
-    {:else if inbox.receipts.length === 0}
-      <p class="dim" data-test="inbox-receipts-empty">{t("inboxReceiptsEmpty")}</p>
+  <details class="diagnostics">
+    <summary>{t("conversationDiagnostics")}</summary>
+    {#if inbox.receiptsUnavailable}<p class="problem">{t("inboxReceiptsUnavailable")}</p>
+    {:else if inbox.receipts.length === 0}<p class="dim" data-test="inbox-receipts-empty">{t("conversationDiagnosticsEmpty")}</p>
     {:else}
-      {#if inbox.namesUnavailable}
-        <!-- The counts below are still exact. Only the names are missing, and
-             saying which is missing is the difference between "we lost your
-             deliveries" and "we could not read one file". -->
-        <p class="problem" data-test="inbox-names-unavailable">{t("inboxHistoryNamesUnavailable")}</p>
-      {/if}
-      <ul class="list" data-test="inbox-receipts">
-        {#each inbox.receipts as receipt (receipt.taskID)}
-          {@const named = inbox.named[receipt.taskID] ?? null}
-          <li>
-            <div class="who">
-              <span>
-                {receipt.text
-                  ? t("inboxReceiptMessage")
-                  : t("inboxReceiptFiles", { published: receipt.published, total: receipt.total })}
-              </span>
-              <span class="dim small">{when(receipt.updatedAt)}</span>
-            </div>
-            <p class="dim small" data-test="inbox-receipt-phase">{phaseOf(receipt.phase)}</p>
-            <!--
-              The names, when this delivery has them.
-
-              Only what was CONFIRMED PUBLISHED is listed, and `declared` is
-              shown beside it when they differ — "3 of 7 saved" is the truth
-              about a partial, and a list of three shown alone is not.
-            -->
-            {#if named !== null && named.items.length > 0}
-              <ul class="names" data-test="inbox-history-items">
-                {#each named.items.slice(0, 8) as item (item.name)}
-                  <li>
-                    <span data-test="inbox-history-name">{item.name}</span>
-                    <span class="dim small">{size(item.size)}</span>
-                  </li>
-                {/each}
-              </ul>
-              {#if named.items.length > 8}
-                <p class="dim small" data-test="inbox-history-more">
-                  {t("inboxHistoryMore", { count: named.items.length - 8 })}
-                </p>
-              {/if}
-              {#if named.items.length < named.declared}
-                <p class="dim small" data-test="inbox-history-partial">
-                  {t("inboxHistoryPartial", { saved: named.items.length, declared: named.declared })}
-                </p>
-              {/if}
-              <button
-                type="button"
-                data-test="inbox-history-forget"
-                disabled={inbox.working.includes(receipt.taskID)}
-                onclick={() => void inbox.forget(receipt.taskID)}
-                title={t("inboxHistoryForgetHint")}
-              >
-                {t("inboxHistoryForget")}
-              </button>
-            {:else if !receipt.text && !inbox.namesUnavailable}
-              <!-- A real delivery with nothing to name. Said out loud, because
-                   an empty row otherwise reads as an empty delivery. -->
-              <p class="dim small" data-test="inbox-receipt-unnamed">{t("inboxReceiptUnnamed")}</p>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-      {#if inbox.view.hasDestination}
-        <button type="button" data-test="inbox-receipts-reveal" onclick={() => void inbox.reveal()}>
-          {t("inboxRevealFolder")}
-        </button>
-      {/if}
+    <ul class="list" data-test="inbox-receipts">
+      {#each inbox.receipts as receipt (receipt.taskID)}
+        <li><span>{receipt.text ? t("inboxReceiptMessage") : t("inboxReceiptFiles", { published: receipt.published, total: receipt.total })}</span>
+          <span class="dim small" data-test="inbox-receipt-phase">{phaseOf(receipt.phase)}</span></li>
+      {/each}
+    </ul>
     {/if}
-  </Card>
+  </details>
 
   <!-- Retained cleanups: destinations this process could not confirm it closed.
        A key and a code, never a path. -->
@@ -986,6 +847,9 @@
 {/if}
 
 <style>
+  .peers { display: flex; flex-wrap: wrap; gap: var(--space-tight); }
+  .peers button[aria-pressed="true"] { border-color: var(--accent); background: var(--surface); font-weight: 600; }
+  .diagnostics { margin: var(--space-section) 0; }
   h1 { margin: 0 0 var(--space-hairline); font-size: 20px; font-weight: 600; }
   .lede { margin: 0 0 var(--space-section); color: var(--text-dim); }
   .dim { color: var(--text-dim); margin: 0 0 var(--space-tight); }
@@ -1017,9 +881,6 @@
     border-radius: var(--corner);
     background: var(--surface);
   }
-  /* A received message is the sender's text: it keeps their line breaks, and it
-     wraps rather than overflowing on a long unbroken string. */
-  .body p { margin: 0 0 var(--space-tight); white-space: pre-wrap; overflow-wrap: anywhere; }
   .indeterminate {
     position: relative;
     overflow: hidden;

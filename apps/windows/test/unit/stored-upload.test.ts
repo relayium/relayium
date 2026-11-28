@@ -14,7 +14,7 @@
 // `SecretStore` is real too, with a passthrough cipher, so the custody
 // ordering (key on disk BEFORE init) is observable rather than asserted about a
 // mock.
-import { mkdtemp, readFile, rm, access } from "node:fs/promises";
+import { mkdtemp, readFile, rm, access, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -27,6 +27,8 @@ import type { StoredObjectMeta, StoredObjectSource } from "../../src/main/stored
 import { captureAuthority, Fence } from "../../src/main/stored/upload/authority.js";
 import { UploadEngine } from "../../src/main/stored/upload/engine.js";
 import { UploadJournal } from "../../src/main/stored/upload/journal.js";
+import { UploadKeyCustody } from "../../src/main/stored/upload/custody.js";
+import { accountKeyOf } from "../../src/main/inbox/account.js";
 import { frameGeometry, frameLengthAt, planUpload } from "../../src/main/stored/upload/plan.js";
 import { manifestDigest } from "../../src/main/stored/upload/reconcile.js";
 import { MAX_ACTIVE_JOBS, StoredUploadService } from "../../src/main/stored/upload/service.js";
@@ -129,6 +131,9 @@ interface ServerOptions {
    * real size: the genuine 409 gap.
    */
   readonly loseAppendResponse?: { readonly nth: number };
+  /** Unlike the old blob-ahead/row-behind control, status already sees the
+   * committed prefix when the append response is lost. */
+  readonly statusSeesLostAppend?: boolean;
   /** Answer every PATCH 409 with this fixed offset. */
   readonly stickyOffset?: number;
   /** Report an offset BEHIND what the client sent. */
@@ -264,6 +269,7 @@ class FakeServer {
     session.chunks.push(chunk.subarray(0, take));
     session.received += take;
     if (this.options.loseAppendResponse?.nth === this.appendCount) {
+      if (this.options.statusSeesLostAppend) session.mirror = session.received;
       // Committed to the blob; the row never heard, and neither did the client.
       throw new TypeError("fetch failed");
     }
@@ -430,7 +436,7 @@ async function produce(
 
 async function service(
   server: FakeServer,
-  options: { readonly onInit?: () => Promise<void> } = {},
+  options: { readonly onInit?: () => Promise<void>; readonly enableRecovery?: boolean } = {},
 ): Promise<{ svc: StoredUploadService; secretsDir: string; journalDir: string }> {
   const secretsDir = await tempDir();
   const journalDir = await tempDir();
@@ -438,6 +444,7 @@ async function service(
   const svc = new StoredUploadService({
     secrets: new SecretStore(secretsDir, passthrough),
     journalDirectory: journalDir,
+    enableRecovery: options.enableRecovery ?? false,
     runtime: async () => runtime,
     transportFactory: (authority) =>
       new UploadTransport(authority.origin, authority.bearer, { fetchImpl: server.fetch }),
@@ -605,6 +612,149 @@ describe("the offset algebra", () => {
   // Not a fill: a periodic pattern makes a replay from the wrong offset, or a
   // swapped chunk, produce different ciphertext rather than identical bytes.
   const patterned = (length: number): Uint8Array => Uint8Array.from({ length }, (_, i) => (i * 31 + 7) % 251);
+
+  it.each([100_000, 20_000])("replays only retained bytes when status confirms a lost append (%i plaintext bytes)", async (length) => {
+    const server = new FakeServer({ chunkSize: 64 * 1024, loseAppendResponse: { nth: 1 }, statusSeesLostAppend: true });
+    traceOnFailure(server);
+    const { svc } = await service(server);
+    const picked: Picked[] = [{ path: "retained.bin", data: patterned(length) }];
+    const { started, outcome } = await upload(svc, picked);
+    expect(started.ok).toBe(true);
+    expect(outcome?.status).toBe("published");
+    if (!started.ok) throw new Error("upload never started");
+    expect(server.requests.filter((r) => r === "POST /api/uploads")).toHaveLength(1);
+    expect(server.requests.filter((r) => r.endsWith("/finalize"))).toHaveLength(1);
+    await expectExactRecovery(server, started.contentKey, picked);
+  });
+
+  it.each(["start", "inside-frame", "transport-boundary", "frame-boundary", "end"])("resumes complete original ciphertext at %s without opening a second session", async (position) => {
+    const server = new FakeServer({ chunkSize: 64 * 1024 });
+    const picked: Picked[] = [{ path: "resume.bin", data: patterned(runtime.constants.storeChunkSize + 100_000) }];
+    const generated = await runtime.generateKey();
+    const result = planUpload(picked.map((p) => ({ path: p.path, size: p.data.length })), runtime.constants);
+    if (!result.ok) throw new Error("plan refused");
+    const sealed = await runtime.sealManifest(generated.key, { files: result.plan.manifest });
+    const transport = new UploadTransport(ORIGIN, "token-1", { fetchImpl: server.fetch });
+    const session = await transport.init(sealed, { ttlSeconds: 3600, burnAfterRead: false }, result.plan.cipherBytes);
+    const frames = await produce(picked, generated.encoded, runtime.constants);
+    const original = concat(frames.map((f) => f.bytes));
+    expect(original.length).toBe(picked[0]!.data.length + 2 * runtime.constants.frameOverhead);
+    const received = position === "start" ? 0 : position === "inside-frame" ? 500
+      : position === "transport-boundary" ? 65_536 : position === "frame-boundary" ? frames[0]!.bytes.length : original.length;
+    if (received) await transport.append(session.uploadId, 0, original.length, original.subarray(0, received));
+    const status = await transport.status(session.uploadId);
+    if (status === "gone") throw new Error("session disappeared");
+    const engine = UploadEngine.resume({ ...session, received: status.received, runtime, plan: result.plan, transport, fence: new Fence(captureAuthority(authority())) });
+    for (const frame of frames) {
+      if (engine.expects && frame.seq >= engine.expects.seq) await engine.feed(frame);
+    }
+    expect((await engine.end()).status).toBe("published");
+    expect(server.requests.filter((r) => r === "POST /api/uploads")).toHaveLength(1);
+    await expectExactRecovery(server, generated.encoded, picked);
+    for (const invalid of [-1, NaN, original.length + 1]) {
+      expect(() => UploadEngine.resume({ ...session, received: invalid, runtime, plan: result.plan, transport, fence: new Fence(captureAuthority(authority())) }))
+        .toThrow("offset-invalid");
+    }
+  });
+
+  it("retains the only content key on interruption and rebinds a restarted service before resuming the same session", async () => {
+    const server = new FakeServer({ chunkSize: 64 * 1024, failAppend: { nth: 2, status: 403 } });
+    const { svc, secretsDir, journalDir } = await service(server, { enableRecovery: true });
+    const picked: Picked[] = [{ path: "recover-service.bin", data: patterned(runtime.constants.storeChunkSize + 1000) }];
+    const start = await svc.start({ authority: authority(), descriptors: picked.map((p) => ({ path: p.path, size: p.data.length })),
+      retention: { burnAfterRead: false, ttlSeconds: 3600 } });
+    if (!start.ok) throw new Error("preparation admission failed");
+    const frames = await produce(picked, start.contentKey, runtime.constants);
+    for (const frame of frames) await svc.feed(start.jobId, frame);
+    expect(server.requests).toEqual([]);
+    expect((await svc.end(start.jobId)).status).toBe("interrupted");
+    const custody = new UploadKeyCustody(new SecretStore(secretsDir, passthrough));
+    expect((await custody.read(start.jobId, ACCOUNT)).encodedKey).toBe(start.contentKey);
+    expect((await svc.record(start.jobId))?.state).toBe("interrupted");
+    const restarted = new StoredUploadService({ secrets: new SecretStore(secretsDir, passthrough), journalDirectory: journalDir,
+      enableRecovery: true, runtime: async () => runtime,
+      transportFactory: (a) => new UploadTransport(a.origin, a.bearer, { fetchImpl: server.fetch }), now: () => server.now });
+    const plan = (await restarted.recoveryPlans(ACCOUNT, ORIGIN))[0]!;
+    const prior = server.requests.length;
+    await expect(restarted.resume({ jobId: start.jobId, revision: plan.revision, authority: authority({ accountId: OTHER_ACCOUNT }) }))
+      .rejects.toMatchObject({ code: "account" });
+    await expect(restarted.resume({ jobId: start.jobId, revision: plan.revision - 1, authority: authority() }))
+      .rejects.toMatchObject({ code: "conflict" });
+    expect(server.requests).toHaveLength(prior);
+    expect((await restarted.resume({ jobId: start.jobId, revision: plan.revision, authority: authority() })).status).toBe("published");
+    expect(server.requests.filter((r) => r === "POST /api/uploads")).toHaveLength(1);
+    expect((await restarted.record(start.jobId))?.state).toBe("published");
+    await expectExactRecovery(server, start.contentKey, picked);
+    expect(await restarted.recoveryPlans(ACCOUNT, ORIGIN, true)).toEqual([]);
+    expect((await custody.read(start.jobId, ACCOUNT)).encodedKey).toBe(start.contentKey);
+  });
+
+  it("declined or account-aborted discard preserves ciphertext and keys; confirmed discard sends no server requests", async () => {
+    const server = new FakeServer({ chunkSize: 65536, failAppend: { nth: 1, status: 403 } });
+    const { svc, secretsDir } = await service(server, { enableRecovery: true });
+    const result = await upload(svc, [{ path: "discard.bin", data: patterned(100_000) }]);
+    if (!result.started.ok) throw new Error("preparation failed");
+    const jobId = result.started.jobId;
+    const plan = (await svc.recoveryPlans(ACCOUNT, ORIGIN))[0]!;
+    const input = { jobId, revision: plan.revision, accountId: ACCOUNT, origin: ORIGIN };
+    const before = server.requests.length;
+    expect(await svc.discardRecovery({ ...input, confirm: async () => false })).toBe("declined");
+    expect((await svc.recoveryPlans(ACCOUNT, ORIGIN))[0]).toEqual(plan);
+    const abort = new AbortController();
+    expect(await svc.discardRecovery({ ...input, signal: abort.signal, confirm: async () => { abort.abort(); return true; } })).toBe("failed");
+    expect((await svc.record(jobId))?.state).toBe("interrupted");
+    expect(await svc.discardRecovery({ ...input, revision: plan.revision - 1, confirm: async () => { throw new Error("stale confirmation opened"); } })).toBe("refused");
+    expect(await svc.discardRecovery({ ...input, confirm: async () => true })).toBe("discarded");
+    expect(await svc.recoveryPlans(ACCOUNT, ORIGIN)).toEqual([]);
+    expect((await svc.record(jobId))?.state).toBe("closed");
+    expect(server.requests).toHaveLength(before);
+    await expect(new UploadKeyCustody(new SecretStore(secretsDir, passthrough)).read(jobId, ACCOUNT)).rejects.toMatchObject({ code: "missing" });
+  });
+
+  it("confirmed local discard of unknown finalization keeps the only key and read-only reconciliation record", async () => {
+    const server = new FakeServer({ loseFinalize: true });
+    const { svc, secretsDir } = await service(server, { enableRecovery: true });
+    const result = await upload(svc, [{ path: "unknown.bin", data: patterned(1000) }]);
+    if (!result.started.ok) throw new Error("preparation failed");
+    const plan = (await svc.recoveryPlans(ACCOUNT, ORIGIN))[0]!;
+    expect(plan.phase).toBe("finalizing");
+    const before = server.requests.length;
+    expect(await svc.discardRecovery({ jobId: plan.jobId, revision: plan.revision, accountId: ACCOUNT, origin: ORIGIN,
+      confirm: async (_signal, unknown) => { expect(unknown).toBe(true); return true; } })).toBe("discarded");
+    expect((await svc.record(plan.jobId))?.state).toBe("ambiguous");
+    expect((await new UploadKeyCustody(new SecretStore(secretsDir, passthrough)).read(plan.jobId, ACCOUNT)).encodedKey).toBe(result.started.contentKey);
+    expect(server.requests).toHaveLength(before);
+    expect(server.objects.size).toBe(1);
+  });
+
+  it.each([false, true])("reports incomplete local cleanup without deleting a published key (compacted=%s)", async (compacted) => {
+    const server = new FakeServer();
+    const { svc, secretsDir, journalDir } = await service(server, { enableRecovery: true });
+    const start = await svc.start({ authority: authority(), descriptors: [{ path: "cleanup.txt", size: 1 }], retention: { burnAfterRead: false, ttlSeconds: 3600 } });
+    if (!start.ok) throw new Error("preparation failed");
+    const frames = await produce([{ path: "cleanup.txt", data: new Uint8Array([1]) }], start.contentKey, runtime.constants);
+    for (const frame of frames) await svc.feed(start.jobId, frame);
+    const sentinel = join(journalDir, "stored-recovery", accountKeyOf(ACCOUNT), accountKeyOf(ORIGIN), start.jobId, "unowned-sentinel");
+    await writeFile(sentinel, "preserve this file");
+    const outcome = await svc.end(start.jobId);
+    expect(outcome).toMatchObject({ status: "published", cleanupPending: true });
+    expect((await svc.record(start.jobId))?.note).toBe("cleanup-pending");
+    expect(await readFile(sentinel, "utf8")).toBe("preserve this file");
+    await rm(sentinel);
+    const plan = (await svc.recoveryPlans(ACCOUNT, ORIGIN, true))[0]!;
+    if (compacted) {
+      const previous = (await svc.record(start.jobId))!;
+      await new UploadJournal(journalDir, () => 100, 1).admit({ ...previous, jobId: "compaction-next" });
+    }
+    const reopened = new StoredUploadService({ secrets: new SecretStore(secretsDir, passthrough), journalDirectory: journalDir,
+      enableRecovery: true, runtime: async () => runtime,
+      transportFactory: (auth) => new UploadTransport(auth.origin, auth.bearer, { fetchImpl: server.fetch }) });
+    const requests = server.requests.length;
+    expect(await reopened.discardRecovery({ jobId: start.jobId, revision: plan.revision, accountId: ACCOUNT, origin: ORIGIN, confirm: async () => true })).toBe("discarded");
+    expect((await reopened.record(start.jobId))?.state).toBe(compacted ? undefined : "published");
+    expect(server.requests).toHaveLength(requests); expect(server.objects.size).toBe(1);
+    expect((await new UploadKeyCustody(new SecretStore(secretsDir, passthrough)).read(start.jobId, ACCOUNT)).encodedKey).toBe(start.contentKey);
+  });
 
   it("replays the exact unacknowledged suffix after a partial commit", async () => {
     const data = new Uint8Array(runtime.constants.storeChunkSize + 500).fill(3);

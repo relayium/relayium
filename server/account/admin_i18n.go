@@ -3,6 +3,7 @@ package account
 import (
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 )
 
@@ -441,27 +442,28 @@ func (s *Service) handleAdminLang(w http.ResponseWriter, r *http.Request) {
 		lang = "zh"
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name: adminLangCookie, Value: lang, Path: "/admin",
+		Name: adminLangCookie, Value: lang, Path: s.AdminPath(),
 		MaxAge: 365 * 24 * 3600, HttpOnly: true,
 		Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
 	})
-	http.Redirect(w, r, adminReturnPath(r.Referer()), http.StatusFound)
+	http.Redirect(w, r, adminReturnPath(r.Referer(), s.AdminPath()), http.StatusFound)
 }
 
 // adminReturnPath reduces a Referer to a path inside the console, or /admin.
-func adminReturnPath(referer string) string {
+func adminReturnPath(referer string, paths ...string) string {
+	base := optionalAdminPath(paths)
 	if referer == "" {
-		return "/admin"
+		return base
 	}
 	u, err := url.Parse(referer)
 	if err != nil {
-		return "/admin"
+		return base
 	}
 	// Path only: the host is discarded rather than compared, so there is nothing
 	// to get wrong about which hosts count as ours.
 	p := u.EscapedPath()
-	if p != "/admin" && !strings.HasPrefix(p, "/admin/") {
-		return "/admin"
+	if p != u.Path || path.Clean(p) != p || strings.Contains(p, "//") || (p != base && !strings.HasPrefix(p, base+"/")) {
+		return base
 	}
 	if u.RawQuery != "" {
 		return p + "?" + u.RawQuery

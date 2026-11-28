@@ -34,7 +34,7 @@
 // bytes under a key that has already been used.
 
 import { encryptFiles, importStoreKey, decodeKey } from "../../../../../web/src/lib/store-crypto";
-import type { FrameExpectation, InboxSendStart, InboxView } from "../../shared/ipc-contract.js";
+import type { FrameExpectation, InboxSendStart, InboxView, InboxSentHistoryView, InboxSendRecoveryEntry } from "../../shared/ipc-contract.js";
 import type { InboxSendTargetView, InboxSendView } from "../../main/features/inbox-send.js";
 
 /** What `inboxSendTargets` answers. */
@@ -44,6 +44,15 @@ export type InboxSendTargetsAnswer =
 
 /** The preload surface this controller uses. Declared, not inferred. */
 export interface InboxSendBridge {
+  history?(): Promise<{ entries: readonly InboxSentHistoryView[] | null; names?: Readonly<Record<string, string>> }>;
+  open?(payload: { jobId: string }): Promise<{ text: string } | null>;
+  copy?(payload: { jobId: string }): Promise<{ ok: boolean }>;
+  forget?(payload: { ids: readonly string[] }): Promise<{ ok: boolean }>;
+  recovery?(): Promise<{ entries: readonly InboxSendRecoveryEntry[] | null }>;
+  resume?(payload: { jobId: string; version: string }): Promise<InboxSendView>;
+  refreshTracked?(): Promise<{ ok: boolean }>;
+  discardRecovery?(payload: { jobId: string; version: string }): Promise<{ result: "discarded" | "declined" | "refused" | "failed" }>;
+  cancelDelivery?(payload: { jobId: string }): Promise<InboxSendView>;
   targets(): Promise<InboxSendTargetsAnswer>;
   start(payload: {
     target: string;
@@ -119,6 +128,21 @@ export class InboxSendController {
   message = $state("");
 
   busy = $state(false);
+  conversationPeer = $state<string | null>(null);
+  history = $state<readonly InboxSentHistoryView[]>([]);
+  peerNames = $state<Readonly<Record<string, string>>>({});
+  historyUnavailable = $state(false);
+  recoveries = $state<readonly InboxSendRecoveryEntry[]>([]);
+  recoveryUnavailable = $state(false);
+  discarding = $state<string | null>(null);
+  recoveryNotice = $state<"discarded" | "failed" | null>(null);
+  cancellingDelivery = $state<string | null>(null);
+  cancelNotice = $state<"cancelled" | "already-finished" | "in-progress" | "unconfirmed" | null>(null);
+  openSentID = $state<string | null>(null);
+  openSentText = $state("");
+  #historySeq = 0;
+  #openSentSeq = 0;
+  #tracking = false;
   /** Per target, keyed by device id. Cleared by a new pick or a new send. */
   status = $state<Readonly<Record<string, TargetStatus>>>({});
   /**
@@ -230,12 +254,104 @@ export class InboxSendController {
     this.targetsRefusal = null;
     this.selected = [];
     this.status = {};
+    this.conversationPeer = null;
+    this.#historySeq += 1; this.#openSentSeq += 1;
+    this.history = []; this.peerNames = {}; this.historyUnavailable = false; this.openSentID = null; this.openSentText = "";
+    this.recoveries = []; this.recoveryUnavailable = false;
+    this.discarding = null; this.recoveryNotice = null;
+    this.cancellingDelivery = null; this.cancelNotice = null;
     // Another account's deliveries, and its jobs are not this account's to ask
     // about — main refuses a converge across an account change anyway.
     this.unresolvedSends = [];
     this.#checking = new Set();
     this.busy = false;
     void this.refreshTargets();
+    void this.refreshHistory();
+  }
+
+  choosePeer(peer: string): void {
+    if (this.busy || this.conversationPeer === peer) return;
+    this.clear(); this.conversationPeer = peer;
+    this.selected = this.targets.some((target) => target.deviceID === peer && target.eligible) ? [peer] : [];
+    this.#openSentSeq += 1; this.openSentID = null; this.openSentText = "";
+  }
+  async refreshHistory(): Promise<void> {
+    if (!this.bridge.history) return;
+    const epoch = this.#epoch; const seq = ++this.#historySeq;
+    const [answer, recoveries] = await Promise.all([this.bridge.history().catch(() => ({ entries: null })),
+      this.bridge.recovery?.().catch(() => ({ entries: null })) ?? Promise.resolve({ entries: [] })]);
+    if (this.#epoch !== epoch || this.#historySeq !== seq) return;
+    this.historyUnavailable = answer.entries === null;
+    if (answer.entries !== null) this.history = answer.entries;
+    if ("names" in answer && answer.names) this.peerNames = answer.names;
+    this.recoveryUnavailable = recoveries.entries === null;
+    if (recoveries.entries !== null) this.recoveries = recoveries.entries;
+  }
+  async refreshTracked(): Promise<void> {
+    if (!this.bridge.refreshTracked || this.#tracking) return;
+    this.#tracking = true; const epoch = this.#epoch;
+    try { await this.bridge.refreshTracked().catch(() => null); if (epoch === this.#epoch) await this.refreshHistory(); }
+    finally { this.#tracking = false; }
+  }
+  async resumeRecovery(entry: InboxSendRecoveryEntry): Promise<void> {
+    if (this.busy || this.discarding || !entry.canResume || !this.bridge.resume) return;
+    const attempt = ++this.#attempt; const epoch = this.#epoch;
+    this.busy = true; this.#running = entry.jobId;
+    this.patch(entry.peerID, { phase: "sending", jobId: entry.jobId, view: null, refusal: null, committed: 0, total: 0 });
+    try {
+      const view = await this.bridge.resume({ jobId: entry.jobId, version: entry.version }).catch(() => ({ kind: "unknown", reason: "recovery-unavailable" }) as const);
+      if (!this.#current(attempt, epoch)) return;
+      this.patch(entry.peerID, { phase: "settled", view });
+      if (view.kind !== "unknown") this.established(entry.jobId);
+    } finally {
+      if (this.#current(attempt, epoch)) { this.busy = false; this.#running = null; await this.refreshHistory(); }
+    }
+  }
+  async discardRecovery(entry: InboxSendRecoveryEntry): Promise<void> {
+    if (this.busy || this.discarding || !entry.canDiscard || !this.bridge.discardRecovery) return;
+    const epoch = this.#epoch; this.discarding = entry.jobId; this.recoveryNotice = null;
+    try {
+      const answer = await this.bridge.discardRecovery({ jobId: entry.jobId, version: entry.version }).catch(() => ({ result: "failed" } as const));
+      if (this.#epoch !== epoch) return;
+      if (answer.result === "discarded") { this.established(entry.jobId); this.recoveryNotice = "discarded"; }
+      else if (answer.result !== "declined") this.recoveryNotice = "failed";
+      await this.refreshHistory();
+    } finally { if (this.#epoch === epoch) this.discarding = null; }
+  }
+  async cancelDelivery(jobId: string): Promise<void> {
+    if (this.cancellingDelivery || !this.bridge.cancelDelivery) return;
+    const epoch = this.#epoch; this.cancellingDelivery = jobId; this.cancelNotice = null;
+    try {
+      const view = await this.bridge.cancelDelivery({ jobId }).catch(() => ({ kind: "unknown", reason: "cancel-unavailable" }) as const);
+      if (this.#epoch !== epoch) return;
+      this.cancelNotice = view.kind === "cancelled" ? "cancelled" : view.kind === "delivered" ? "already-finished" : view.kind === "refused" && view.reason === "task_in_progress" ? "in-progress" : "unconfirmed";
+      const peer = this.targetOf(jobId);
+      if (view.kind !== "refused" && peer && this.status[peer]) this.status = { ...this.status, [peer]: { ...this.status[peer], phase: "settled", view } };
+      await this.refreshHistory();
+    } finally { if (this.#epoch === epoch) this.cancellingDelivery = null; }
+  }
+  async openSent(id: string): Promise<void> {
+    const epoch = this.#epoch; const seq = ++this.#openSentSeq;
+    this.openSentText = "";
+    if (this.openSentID === id) { this.openSentID = null; return; }
+    this.openSentID = id;
+    const answer = await this.bridge.open?.({ jobId: id }).catch(() => null);
+    if (this.#epoch !== epoch || this.#openSentSeq !== seq) return;
+    if (answer) this.openSentText = answer.text;
+  }
+  async copySent(id: string): Promise<boolean> {
+    const epoch = this.#epoch;
+    const answer = await this.bridge.copy?.({ jobId: id }).catch(() => null);
+    return epoch === this.#epoch && answer?.ok === true;
+  }
+  async forgetSent(ids: readonly string[]): Promise<boolean> {
+    const epoch = this.#epoch;
+    const answer = await this.bridge.forget?.({ ids: [...ids] }).catch(() => null);
+    if (epoch !== this.#epoch) return false;
+    if (answer?.ok && this.openSentID && ids.includes(this.openSentID)) {
+      this.#openSentSeq += 1; this.openSentID = null; this.openSentText = "";
+    }
+    await this.refreshHistory(); return answer?.ok === true;
   }
 
   /** Whether a delayed result still belongs to the current attempt. */
@@ -290,6 +406,7 @@ export class InboxSendController {
     // looking at a tick next to a machine that cannot take it.
     const eligible = new Set(answer.targets.filter((t) => t.eligible).map((t) => t.deviceID));
     this.selected = this.selected.filter((id) => eligible.has(id));
+    if (this.conversationPeer !== null) this.selected = eligible.has(this.conversationPeer) ? [this.conversationPeer] : [];
   }
 
   toggle(deviceID: string): void {
@@ -401,6 +518,7 @@ export class InboxSendController {
 
   /** Whether there is anything to send at all. */
   get ready(): boolean {
+    if (this.discarding) return false;
     if (this.selected.length === 0) return false;
     return this.mode === "text" ? this.message.trim().length > 0 : this.files.length > 0;
   }
@@ -439,6 +557,7 @@ export class InboxSendController {
       if (this.#current(attempt, epoch)) {
         this.busy = false;
         this.#running = null;
+        void this.refreshHistory();
       }
     }
   }
@@ -643,6 +762,7 @@ export class InboxSendController {
 
   dispose(): void {
     this.#attempt += 1;
+    this.#historySeq += 1; this.#openSentSeq += 1; this.openSentText = "";
     for (const stop of this.#stop.splice(0)) stop();
   }
 }

@@ -3024,6 +3024,16 @@ class TransferController(
         pumpLease = lease
         pumpJob = scope.launch(sessionDispatcher) {
             val live = { epoch == mine && batchGen == myBatch }
+            suspend fun awaitWritable(chunkBytes: Int): Boolean {
+                while (live() && lane.sendState == FileLaneSession.SendState.SENDING) {
+                    if (!_state.value.linkInterrupted &&
+                        (chunkBytes == 0 || (lane.sendCredit >= chunkBytes &&
+                            (transport?.fileBufferedAmount() ?: 0) <= BUFFERED_HIGH))
+                    ) return true
+                    delay(POLL_MS)
+                }
+                return false
+            }
             var waited = 0L
             while (live() && lane.sendState == FileLaneSession.SendState.WAITING_ACCEPT) {
                 delay(POLL_MS)
@@ -3077,16 +3087,10 @@ class TransferController(
                             }
                             return@launch
                         } ?: break
-                        if (!live() || lane.sendState != FileLaneSession.SendState.SENDING) return@launch
+                        // Keep the pending chunk unsealed during the transport's
+                        // grace period. Recovery continues on the same channel.
+                        if (!awaitWritable(chunk.size)) return@launch
                         chain = Crypto.chainAdvance(chain, chunk)
-                        while (live() &&
-                            lane.sendState == FileLaneSession.SendState.SENDING &&
-                            (lane.sendCredit < chunk.size ||
-                                (transport?.fileBufferedAmount() ?: 0) > BUFFERED_HIGH)
-                        ) {
-                            delay(POLL_MS)
-                        }
-                        if (!live() || lane.sendState != FileLaneSession.SendState.SENDING) return@launch
                         apply(mine, lane.sendChunk(chunk))
                         sent += chunk.size
                         if (!live()) return@launch
@@ -3100,7 +3104,7 @@ class TransferController(
                     // and this finally runs on the session dispatcher.
                     lease.release()?.let(::closeOffOwner)
                 }
-                if (!live() || lane.sendState != FileLaneSession.SendState.SENDING) return@launch
+                if (!awaitWritable(0)) return@launch
                 if (sent != source.meta.size) {
                     // The provider returned different bytes than it declared —
                     // the file changed underneath the pick. Stop honestly.

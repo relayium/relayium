@@ -180,3 +180,151 @@ func TestHelpAndUnknownCommands(t *testing.T) {
 		t.Fatal("no command must be a usage error")
 	}
 }
+
+func TestConfiguredAdminPathEnrollmentLink(t *testing.T) {
+	db := newDB(t)
+	for _, args := range [][]string{
+		{"--db", db, "--base-url", "https://admin.example", "--admin-path", "/console_7-Z", "enroll", "start", "--name", "test"},
+		{"enroll", "start", "--db", db, "--base-url", "https://admin.example", "--admin-path", "/console_7-Z", "--name", "test"},
+	} {
+		code, out, errOut := cli(t, true, args...)
+		if code != 0 || !strings.Contains(out, "https://admin.example/console_7-Z/enroll#") || strings.Contains(out, "/admin/enroll#") {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+	}
+	t.Setenv("RELAYIUM_ADMIN_PATH", "/server_console")
+	code, out, errOut := cli(t, true, "--db", db, "--base-url", "https://admin.example", "enroll", "start", "--name", "env")
+	if code != 0 || !strings.Contains(out, "/server_console/enroll#") {
+		t.Fatalf("env code %d %s %s", code, out, errOut)
+	}
+	for _, args := range [][]string{{"--admin-path", "/bad/path", "status"}, {"status", "--admin-path", "/api", "--db", db}} {
+		code, _, _ := cli(t, true, args...)
+		if code != 2 {
+			t.Errorf("invalid path code=%d", code)
+		}
+	}
+}
+
+func TestIPAccessLocalCLIRecovery(t *testing.T) {
+	db := newDB(t)
+	st, err := account.OpenSQLite(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4; i++ {
+		if _, err := st.AdminAccessAttempt(context.Background(), "198.51.100.7", false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	code, out, e := cli(t, false, "--db", db, "ip-access", "list")
+	if code != 0 || !strings.Contains(out, "198.51.100.7 attempts=4 banned=true") {
+		t.Fatalf("list %d %s %s", code, out, e)
+	}
+	code, out, e = cli(t, false, "ip-access", "unblock", "198.51.100.7", "--db", db)
+	if code != 0 {
+		t.Fatalf("unblock %d %s %s", code, out, e)
+	}
+	code, out, e = cli(t, false, "--db", db, "ip-access", "list")
+	if code != 0 || out != "" {
+		t.Fatalf("after %d %s %s", code, out, e)
+	}
+}
+
+func TestBrowserCLIPrivateLinkAndRecovery(t *testing.T) {
+	db := newDB(t)
+	base := []string{"--db", db, "--base-url", "https://admin.example", "--admin-path", "/console-test"}
+	re := regexp.MustCompile(`https://admin\.example/console-test/authorize-browser#([0-9a-f]{64})`)
+	if code, out, errOut := cli(t, false, append(base, "browsers", "start", "--name", "Browser")...); code != 2 || re.MatchString(out+errOut) {
+		t.Fatalf("unsafe non-terminal output: %d %q %q", code, out, errOut)
+	}
+	code, out, errOut := cli(t, false, append(base, "browsers", "start", "--name", "Browser", "--allow-non-terminal")...)
+	if code != 0 {
+		t.Fatal(code, out, errOut)
+	}
+	match := re.FindStringSubmatch(out)
+	if len(match) != 2 {
+		t.Fatalf("missing custom-path fragment link: %q", out)
+	}
+	dbStore, err := account.OpenSQLite(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dbStore.Close()
+	cookie, err := dbStore.RedeemAdminBrowserGrant(context.Background(), match[1], "https://admin.example", "/console-test", fixedNow().Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, out, errOut = cli(t, true, append(base, "browsers", "list")...)
+	if code != 0 || !strings.Contains(out, "expires=never") || strings.Contains(out+errOut, cookie) || strings.Contains(out+errOut, match[1]) {
+		t.Fatal("list disclosed tokens", code)
+	}
+	rows, err := dbStore.AdminAuth().ListBrowsers(context.Background())
+	if err != nil || len(rows) != 1 {
+		t.Fatal(rows, err)
+	}
+	if code, out, errOut = cli(t, true, append(base, "browsers", "revoke", rows[0].ID)...); code != 0 {
+		t.Fatal(code, out, errOut)
+	}
+	if ok, err := dbStore.AdminBrowserAuthorized(context.Background(), cookie, "https://admin.example", "/console-test", fixedNow().Unix()); err != nil || ok {
+		t.Fatal("CLI revocation ineffective", ok, err)
+	}
+	// Start another link, cancel it by its printed ID, then prove it cannot mint.
+	code, out, errOut = cli(t, true, append(base, "browsers", "start", "--name", "Cancelled")...)
+	if code != 0 {
+		t.Fatal(code, out, errOut)
+	}
+	match = re.FindStringSubmatch(out)
+	id := strings.Fields(out)[2]
+	if code, out, errOut = cli(t, true, append(base, "browsers", "cancel", id)...); code != 0 {
+		t.Fatal(code, out, errOut)
+	}
+	if _, err = dbStore.RedeemAdminBrowserGrant(context.Background(), match[1], "https://admin.example", "/console-test", fixedNow().Unix()); err == nil {
+		t.Fatal("CLI-cancelled link redeemed")
+	}
+}
+func TestBrowserCLIHelpKeepsDeploymentValuesPrivate(t *testing.T) {
+	_, out, errOut := cli(t, true, "--db", "/private-marker.sqlite", "--base-url", "https://private-marker.example", "--admin-path", "/private-marker-console", "browsers", "list", "-h")
+	for _, marker := range []string{"private-marker.sqlite", "private-marker.example", "private-marker-console"} {
+		if strings.Contains(out+errOut, marker) {
+			t.Fatalf("help disclosed %s", marker)
+		}
+	}
+}
+
+func TestVersionPolicyRefreshCLIRequiresRevisionAndKeepsMinimums(t *testing.T) {
+	db := newDB(t)
+	st, err := account.OpenSQLite(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	current, err := st.GetOperationalVersionPolicy(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := []string{"--db", db, "version-policy", "refresh-macos"}
+	if code, _, _ := cli(t, true, base...); code != 2 {
+		t.Fatal("revision flag not required", code)
+	}
+	if code, _, _ := cli(t, true, append(base, "--expected-revision", "100")...); code != 1 {
+		t.Fatal("stale revision not refused", code)
+	}
+	code, out, errOut := cli(t, true, append(base, "--expected-revision", "6")...)
+	if code != 0 {
+		t.Fatal(code, out, errOut)
+	}
+	next, err := st.GetOperationalVersionPolicy(context.Background())
+	if err != nil || next.FleetMinimumVersion != current.FleetMinimumVersion || next.MacMinimumVersion != current.MacMinimumVersion || next.MacMinimumBuild != current.MacMinimumBuild {
+		t.Fatal("CLI changed minimums", next, err)
+	}
+	if next.Revision != current.Revision+1 || next.MacLatestVersion == current.MacLatestVersion ||
+		next.MacRecommendedVersion != next.MacLatestVersion {
+		t.Fatal("CLI did not advance the durable macOS policy", current, next)
+	}
+	if want := "recommended=" + next.MacRecommendedVersion + " latest=" + next.MacLatestVersion; !strings.Contains(out, want) {
+		t.Fatalf("CLI reported %q instead of the stored versions %q", out, want)
+	}
+}

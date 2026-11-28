@@ -53,6 +53,20 @@ final class FakeLinkTransport: LinkReplacementTransport, LinkLiveTransport, @unc
 
     private var _sent: [(lane: LinkLane, bytes: [UInt8])] = []
     private var _buffered: UInt64 = 0
+    let bufferDrain = LinkBufferDrainSignal()
+    var onObserveBuffer: (() -> Void)?
+    private(set) var observedBufferWake: (() -> Void)?
+
+    func observeFileBufferDrain(whenAtMost threshold: UInt64,
+                                wake: @escaping () -> Void) -> () -> Void {
+        observedBufferWake = wake
+        let cancel = bufferDrain.observe(whenAtMost: threshold, wake: wake)
+        onObserveBuffer?()
+        return cancel
+    }
+
+    func signalBufferDrain() { bufferDrain.notify(bufferedAmount: bufferedAmount(on: .file)) }
+
     private var _closed = false
     private var _failSend = false
     private var _captured: [(LinkLane, [UInt8])] = []
@@ -642,6 +656,118 @@ final class LinkFileDriverTests: XCTestCase {
         scheduler.fireAll()
         driver.settle()
         XCTAssertGreaterThan(transport.sent.count, beforeAccept, "credit restarted it")
+    }
+
+    private func parkedBufferDriver(window: Int = FLOW_WINDOW)
+        throws -> (LinkFileDriver, FakeLinkTransport, FakeLinkScheduler, Int, LinkIdentity) {
+        let codecs = LinkCodecs(sendKey: [UInt8](repeating: 0x51, count: 32),
+                                recvKey: [UInt8](repeating: 0x52, count: 32))
+        let identity = LinkIdentity(peerId: "peer", role: .initiator, sas: "1", codecs: codecs)
+        let transport = FakeLinkTransport()
+        let scheduler = FakeLinkScheduler()
+        let frames = try (0..<3).map { _ in
+            try codecs.fileSender.nextChunkFrame([UInt8](repeating: 1, count: 64))
+        }
+        let driver = LinkFileDriver(identity: identity, transport: transport,
+                                    scheduler: scheduler,
+                                    producerFactory: { _ in FakeProducer(frames: frames) },
+                                    destinationFactory: { _, _ in FakeDestination() },
+                                    window: window, sendBufferHighWater: 10,
+                                    onTextFrame: { _ in }, onEvent: { _ in })
+        transport.setBuffered(1000)
+        let id = try driver.enqueue(files: [meta("a.bin", 4 * C)], stage: { [] })
+        driver.pump()
+        transport.deliver(.file, [RealtimeControl.accept.rawValue])
+        driver.settle()
+        return (driver, transport, scheduler, id, identity)
+    }
+
+    func testBufferNotificationResumesWithoutWaitingForThePollTimer() throws {
+        let (driver, transport, scheduler, _, _) = try parkedBufferDriver()
+        let before = transport.sentCount
+        XCTAssertNotNil(transport.observedBufferWake)
+        transport.setBuffered(0)
+        transport.signalBufferDrain()
+        driver.settle()
+        XCTAssertEqual(transport.sentCount, before + 3)
+        // No scheduler wake-up has been fired. Even already-captured timer
+        // callbacks must not duplicate the three encrypted frames.
+        scheduler.fireCancelledOnly()
+        driver.settle()
+        XCTAssertEqual(transport.sentCount, before + 3)
+    }
+
+    func testBufferNotificationRechecksTheBufferInsteadOfGrantingCredit() throws {
+        let (driver, transport, _, _, _) = try parkedBufferDriver()
+        let before = transport.sentCount
+        let hint = try XCTUnwrap(transport.observedBufferWake)
+        hint() // A delayed hint while the buffer is high again.
+        driver.settle()
+        XCTAssertEqual(transport.sentCount, before)
+        transport.setBuffered(0)
+        transport.signalBufferDrain()
+        driver.settle()
+        XCTAssertEqual(transport.sentCount, before + 3)
+    }
+
+    func testBufferDrainCannotBypassTheReceiversAckWindow() throws {
+        let (driver, transport, _, _, _) = try parkedBufferDriver(window: 1)
+        let before = transport.sentCount
+        transport.setBuffered(0)
+        transport.signalBufferDrain()
+        driver.settle()
+        XCTAssertEqual(transport.sentCount, before + 1)
+        let hint = try XCTUnwrap(transport.observedBufferWake)
+        hint()
+        driver.settle()
+        XCTAssertEqual(transport.sentCount, before + 1, "durable ACK credit is still required")
+    }
+
+    func testCapturedBufferNotificationCannotReviveACancelledProducer() throws {
+        let (driver, transport, scheduler, _, _) = try parkedBufferDriver()
+        let hint = try XCTUnwrap(transport.observedBufferWake)
+        driver.cancelOutbound()
+        driver.settle()
+        let afterCancel = transport.sentCount
+        transport.setBuffered(0)
+        hint()
+        transport.signalBufferDrain()
+        scheduler.fireCancelledOnly()
+        driver.settle()
+        XCTAssertEqual(transport.sentCount, afterCancel)
+        XCTAssertNil(driver.activeOutboundBatch)
+    }
+
+    func testOldTransportBufferNotificationCannotWakeAReplacement() throws {
+        let (driver, transport, scheduler, _, identity) = try parkedBufferDriver()
+        let hint = try XCTUnwrap(transport.observedBufferWake)
+        _ = driver.onTransportLost(identity)
+        let replacement = FakeLinkTransport()
+        try driver.onAttach(identity, replacement)
+        driver.settle()
+        let oldCount = transport.sentCount
+        let newCount = replacement.sentCount
+        transport.setBuffered(0)
+        hint()
+        transport.signalBufferDrain()
+        scheduler.fireCancelledOnly()
+        driver.settle()
+        XCTAssertEqual(transport.sentCount, oldCount)
+        XCTAssertEqual(replacement.sentCount, newCount)
+        driver.onEnded(LinkFileDriverError.linkEnded)
+    }
+
+    func testDrainBetweenBufferReadAndObservationIsNotLost() throws {
+        let (driver, transport, _, _, _) = try parkedBufferDriver()
+        let before = transport.sentCount
+        transport.onObserveBuffer = { transport.setBuffered(0) }
+        // A spurious callback causes a new park. The buffer drains during
+        // subscription with no delegate callback, so only the recheck can wake it.
+        let hint = try XCTUnwrap(transport.observedBufferWake)
+        hint()
+        driver.settle()
+        XCTAssertEqual(transport.sentCount, before + 3)
+        transport.onObserveBuffer = nil
     }
 
     /// A poll wake-up for a producer this driver has already released must not

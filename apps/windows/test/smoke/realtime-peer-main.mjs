@@ -137,7 +137,7 @@ const observed = {
   receivedMessages: [],
   /**
    * The fullest thread this run ever actually saw, read from the REAL history
-   * (`[data-test="history"] li`, whose text content is `{entry.body}` and
+   * (`[data-test="history"] [data-test="text-body"]`, whose text content is `{entry.body}` and
    * nothing else — never the composer, so never a draft read back).
    *
    * A high-water mark rather than a final snapshot because `LinkPane`'s message
@@ -322,7 +322,7 @@ const sendFiles = (win, files) =>
 
 /** Everything the thread is showing, for the orchestrator to compare. */
 const readMessages = (win) =>
-  js(win, `[...document.querySelectorAll('[data-test="history"] li')].map((el) => el.textContent)`);
+  js(win, `[...document.querySelectorAll('[data-test="history"] [data-test="text-body"]')].map((el) => el.textContent)`);
 
 /**
  * Watch ONE receive, recording each thing as it actually happens.
@@ -344,7 +344,7 @@ const readMessages = (win) =>
  * naming exactly what did not happen — nothing here is permitted to pass by
  * being skipped.
  *
- * The thread is read from `[data-test="history"] li` on every pass and kept as a
+ * The thread is read from `[data-test="history"] [data-test="text-body"]` on every pass and kept as a
  * HIGH-WATER MARK. That is not a convenience: `LinkPane`'s message Card is
  * `{#if connected}`, so the moment the peer leaves the room the Card unmounts
  * and a final read returns `[]` however much was delivered into it. The peak is
@@ -454,16 +454,13 @@ async function drive(win) {
   // ---- 2. sign in, only when this round needs a minted code -------------
   if (config.role === "create") {
     pollAnswer = { status: "ok", accessToken: config.token, accountEmail: config.accountEmail };
-    // The REAL button, not the IPC behind it.
-    //
-    // `relayium.auth.start` only mints the device code; `relayium.auth.poll` is a
-    // separate channel and the RENDERER's own controller is what drives it
-    // (`preload.cts:51-56`). Calling `start` directly therefore begins a flow
-    // nothing is polling, which is a sign-in that never lands. Clicking is also
-    // the point: this run is meant to exercise the shipped path.
+    // Exercise the actual email/password form, preload IPC, main-process
+    // native HTTP login and encrypted bearer adoption against the local server.
     await clickTest(win, "nav-account");
-    if (!await until(win, "the signed-out account page", hasTest(win, "sign-in"), 30_000)) return;
-    await clickTest(win, "sign-in");
+    if (!await until(win, "the native password form", hasTest(win, "password-sign-in"), 30_000)) return;
+    await typeInto(win, "login-email", config.accountEmail);
+    await typeInto(win, "login-password", config.password);
+    await clickTest(win, "password-sign-in");
     observed.signedIn = await until(win, "the signed-in account", hasTest(win, "sign-out"), 60_000);
     publishStatus({ phase: "signed-in", signedIn: observed.signedIn });
     if (!observed.signedIn) {

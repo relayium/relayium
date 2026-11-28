@@ -111,6 +111,7 @@ export interface PresentedItem {
 
 export interface PresentationRecord {
   readonly taskID: string;
+  readonly sourceDeviceID?: string;
   readonly receivedAt: number;
   /** True for a message, which lands in the vault rather than on disk. */
   readonly text: boolean;
@@ -128,6 +129,8 @@ export interface PresentationRecord {
 interface PresentationDocument {
   readonly v: number;
   readonly records: readonly PresentationRecord[];
+  readonly deleted?: readonly string[];
+  readonly readAt?: Readonly<Record<string, number>>;
 }
 
 /**
@@ -172,6 +175,8 @@ export class InboxPresentationStore {
   private key: CryptoKey | null = null;
   /** Deep-frozen. Nothing inside it is reachable for mutation by a caller. */
   private cache: readonly PresentationRecord[] | null = null;
+  private deleted = new Set<string>();
+  private readAt: Readonly<Record<string, number>> = {};
   /** Serialises the whole read-modify-write, which `writeAtomic` does not. */
   private tail: Promise<unknown> = Promise.resolve();
 
@@ -213,6 +218,7 @@ export class InboxPresentationStore {
       // that fails a delivery whose files are already on disk.
       const validated = validateRecord(entry, "invalid");
       const records = await this.load();
+      if (this.deleted.has(validated.taskID)) return;
       if (records.some((existing) => existing.taskID === validated.taskID)) return;
       if (records.length >= MAX_PRESENTATION_RECORDS) {
         throw new PresentationError("too-large", `${records.length} records are retained`);
@@ -226,12 +232,28 @@ export class InboxPresentationStore {
     return this.update(async () => {
       const records = await this.load();
       const next = records.filter((record) => record.taskID !== taskID);
-      if (next.length !== records.length) await this.persist(next);
+      if (this.deleted.has(taskID)) return;
+      if (!taskID || taskID.length > MAX_TASK_ID_LENGTH || this.deleted.size >= 10000) throw new PresentationError("too-large");
+      await this.persist(next, this.readAt, new Set([...this.deleted, taskID]));
     });
   }
 
-  private async persist(records: readonly PresentationRecord[]): Promise<void> {
-    const document: PresentationDocument = { v: PRESENTATION_VERSION, records };
+  state(): Promise<{ readonly readAt: Readonly<Record<string, number>>; readonly deleted: readonly string[] }> {
+    return this.update(async () => { await this.load(); return { readAt: { ...this.readAt }, deleted: [...this.deleted] }; });
+  }
+  markRead(ids: readonly string[], at: number): Promise<void> {
+    const snapshot = [...ids];
+    return this.update(async () => {
+      const records = await this.load(); const next = { ...this.readAt };
+      if (!Number.isSafeInteger(at) || at < 0 || snapshot.some((id) => !id || id.length > MAX_TASK_ID_LENGTH)) throw new PresentationError("invalid");
+      for (const id of snapshot) if (!Object.hasOwn(next, id)) Object.defineProperty(next, id, { value: at, enumerable: true, configurable: true, writable: true });
+      if (Object.keys(next).length > 10000) throw new PresentationError("too-large");
+      if (snapshot.some((id) => !Object.hasOwn(this.readAt, id))) await this.persist(records, next);
+    });
+  }
+
+  private async persist(records: readonly PresentationRecord[], readAt = this.readAt, deleted = this.deleted): Promise<void> {
+    const document: PresentationDocument = { v: PRESENTATION_VERSION, records, readAt, deleted: [...deleted] };
     const plaintext = new TextEncoder().encode(JSON.stringify(document));
     if (plaintext.byteLength > MAX_PRESENTATION_BYTES) {
       throw new PresentationError("too-large", `${plaintext.byteLength} bytes`);
@@ -240,6 +262,7 @@ export class InboxPresentationStore {
     await this.files.mkdirp(this.context.directory);
     await this.files.writeAtomic(this.path, sealed);
     this.cache = freezeAll(records);
+    this.readAt = { ...readAt }; this.deleted = new Set(deleted);
   }
 
   private async load(): Promise<readonly PresentationRecord[]> {
@@ -288,7 +311,7 @@ export class InboxPresentationStore {
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new PresentationError("malformed");
     }
-    const document = parsed as { v?: unknown; records?: unknown };
+    const document = parsed as { v?: unknown; records?: unknown; deleted?: unknown; readAt?: unknown };
     if (document.v !== PRESENTATION_VERSION) throw new PresentationError("malformed");
     if (!Array.isArray(document.records)) throw new PresentationError("malformed");
     // The count bound applies to what is READ as well as to what is written. A
@@ -304,6 +327,13 @@ export class InboxPresentationStore {
     const records = (document.records as readonly unknown[]).map((record) =>
       validateRecord(record as PresentationRecord, "malformed"),
     );
+    const deleted = document.deleted ?? [];
+    if (!Array.isArray(deleted) || deleted.length > 10000 || deleted.some((id) => typeof id !== "string" || !id || id.length > MAX_TASK_ID_LENGTH)) throw new PresentationError("malformed");
+    const readAt = document.readAt ?? {};
+    if (!readAt || typeof readAt !== "object" || Array.isArray(readAt) || Object.keys(readAt).length > 10000 ||
+      Object.entries(readAt).some(([id, at]) => !id || id.length > MAX_TASK_ID_LENGTH || !Number.isSafeInteger(at) || (at as number) < 0)) throw new PresentationError("malformed");
+    this.deleted = new Set(deleted as string[]); this.readAt = { ...readAt } as Record<string, number>;
+    if (records.some((record) => this.deleted.has(record.taskID))) throw new PresentationError("malformed");
     this.cache = freezeAll(records);
     return this.cache;
   }
@@ -361,7 +391,9 @@ export function validateRecord(record: PresentationRecord, code: "invalid" | "ma
     if (problem !== null) fail(`item name: ${problem}`);
     return { name: item.name, size: item.size };
   });
-  return { taskID: record.taskID, receivedAt: record.receivedAt, text: record.text, declared: record.declared, items };
+  if (record.sourceDeviceID !== undefined && (typeof record.sourceDeviceID !== "string" || record.sourceDeviceID.length > MAX_TASK_ID_LENGTH)) fail("sourceDeviceID is invalid");
+  return { taskID: record.taskID, receivedAt: record.receivedAt, text: record.text, declared: record.declared, items,
+    ...(record.sourceDeviceID === undefined ? {} : { sourceDeviceID: record.sourceDeviceID }) };
 }
 
 /**
@@ -433,6 +465,7 @@ function freezeAll(records: readonly PresentationRecord[]): readonly Presentatio
 function copyAll(records: readonly PresentationRecord[]): PresentationRecord[] {
   return records.map((record) => ({
     taskID: record.taskID,
+    ...(record.sourceDeviceID === undefined ? {} : { sourceDeviceID: record.sourceDeviceID }),
     receivedAt: record.receivedAt,
     text: record.text,
     declared: record.declared,

@@ -328,7 +328,10 @@ func TestContentSyncDoesNotHashThroughSymlinks(t *testing.T) {
 		{Path: "f.txt", Size: 6, SHA256: digestOf("SECRET")},
 		{Path: "dir/f.txt", Size: 6, SHA256: digestOf("SECRET")},
 	}}
-	rs := contentSyncStateFor(dst, m)
+	rs, err := contentSyncStateFor(dst, m, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(rs.Skip) != 0 {
 		t.Fatalf("a symlinked destination was treated as identical: %+v", rs)
 	}

@@ -333,13 +333,12 @@ describe("English keeps the availability boundaries it is the master of", () => 
     expect(d.platforms.iphone.residency).toMatch(/no always-on iPhone receiver/i);
   });
 
-  it("describes Windows as foreground-only with no service or startup entry", () => {
+  it("describes the unsigned Windows preview without promising a system service", () => {
     const w = d.platforms.windows;
-    // Also inverted 2026-08-28: the tray receiver used to be described as
-    // "planned and not built". There is no Windows app commitment, so the
-    // absence is the whole claim.
-    expect(w.setup).toMatch(/Relayium publishes no Windows app/i);
-    expect(w.setup).toMatch(/no Windows service and no startup entry/i);
+    // The public preview runs in the signed-in session and has no system service.
+    expect(w.setup).toMatch(/unsigned Windows desktop preview/i);
+    expect(w.residency).toMatch(/not a Windows system service/i);
+    expect(w.residency).toMatch(/Quit or signing out of Windows stops receiving/i);
     expect(w.residency).not.toMatch(/always[- ]on receiver\b(?!.{0,30}\bnot\b|:)/i);
   });
 
@@ -406,7 +405,7 @@ describe("maintained copy never promises a native app that is not coming", () =>
    *  HAS a published app, so its section is allowed to talk about one. Android
    *  left this set on 2026-09-09 for the same reason — the 0.2.0 APK is
    *  published, so its section may name the app it really ships. */
-  const NO_APP = ["iphone", "windows"] as const;
+  const NO_APP = ["iphone"] as const;
 
   /** Future-native promises, per maintained language. Each entry is a phrase
    *  that only makes sense if an unshipped native client is on its way. */
@@ -439,7 +438,7 @@ describe("maintained copy never promises a native app that is not coming", () =>
   for (const code of CODES) {
     const d = locales[code].deviceInboxPage;
 
-    it(`${code}: says the app is absent, not delayed, on iPhone, Android and Windows`, () => {
+    it(`${code}: states the absence of a public iPhone app without promising a release`, () => {
       for (const id of NO_APP) {
         const p = d.platforms[id];
         const prose = [p.use, p.setup, p.files, p.residency, p.send, p.recovery, p.stop].join("\n");
@@ -480,7 +479,7 @@ describe("maintained copy never promises a native app that is not coming", () =>
   it("english states the absence itself, so the ban cannot pass by saying nothing", () => {
     const d = locales.en.deviceInboxPage;
     expect(d.platforms.iphone.setup).toMatch(/publishes no iPhone or iPad app/i);
-    expect(d.platforms.windows.setup).toMatch(/publishes no Windows app/i);
+    expect(d.platforms.windows.setup).toMatch(/unsigned Windows desktop preview/i);
     // iPhone is a sender, not an Inbox receiver, and says so. Android used to be
     // asserted here too; it is a receiver as of 0.2.0, so the denial moved out
     // and its positive expectations live in the Android test below.
@@ -534,7 +533,7 @@ describe("maintained copy never promises a native app that is not coming", () =>
   it("chinese states the same absence in its own words", () => {
     const d = locales.zh.deviceInboxPage;
     expect(d.platforms.iphone.setup).toMatch(/不提供 iPhone \/ iPad 应用/);
-    expect(d.platforms.windows.setup).toMatch(/不提供 Windows 原生应用/);
+    expect(d.platforms.windows.setup).toMatch(/未签名 Windows 桌面预览版/);
     // Android's denial was removed at 0.2.0 — it IS a receiver now.
     expect(d.platforms.iphone.files).toMatch(/不是设备收件箱的接收端/);
     expect(d.platforms.windows.setup).toMatch(/命令行接收端的前台运行/);

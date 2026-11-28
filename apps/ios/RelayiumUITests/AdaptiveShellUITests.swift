@@ -62,7 +62,7 @@ final class AdaptiveShellUITests: XCTestCase {
         // iPadOS 18 launches the portrait split view with the sidebar
         // collapsed; its rows and title exist only once it is on screen.
         revealSidebar(app)
-        XCTAssertTrue(app.navigationBars["Relayium destinations"].waitForExistence(timeout: 15),
+        XCTAssertTrue(app.navigationBars["Relayium"].waitForExistence(timeout: 15),
                       "the sidebar has no accessible title")
 
         var previousY: CGFloat = -1

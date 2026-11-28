@@ -88,7 +88,7 @@ const INPUTS = [...CLAIM_SURFACES, MAC_MANIFEST, APP_STORE];
  * than a shorter green run. Change it in the same commit as the claim you add
  * or retire, and say which in the message.
  */
-const EXPECTED_CLAIMS = 126;
+const EXPECTED_CLAIMS = 132;
 
 // ---------------------------------------------------------------------------
 // 1. Swift string semantics
@@ -311,8 +311,10 @@ const WHY = {
   iosRow: "the delivery-status table is what a reader can GET; iOS has shipped nothing, so it "
     + "has no row — and the section must still say what `apps/ios/` is, because a claim removed "
     + "instead of corrected is this repository's recurring documentation failure",
-  browsersRow: "the platforms with no native client must still be told what to use, and Android "
-    + "left that row when its APK was published",
+  browsersRow: "the platforms with no public native client must still be told what to use; Android "
+    + "and Windows have independent preview rows",
+  windowsRow: "Windows has a separate unsigned x64 preview with in-app password login and no automatic "
+    + "updating; its browser and CLI options stay available",
   androidRow: "Android has a row of its own that names the direct-APK channel and the limits "
     + "that are still real, and must not resurrect the 0.1.1-era denials",
   roadmap: "the root README is concise and points detailed future work at docs/ instead of "
@@ -326,7 +328,7 @@ const IOS_STATUS_SENTENCE = "iOS development resumed on 2026-09-01 at version 0.
   + "TestFlight builds were used for development acceptance before the earlier pause, and "
   + "neither the iOS app nor its share extension is publicly offered.";
 const ROOT_IOS_STATE = "`apps/ios/` exists in this repository and its development has "
-  + "**resumed**, at version `0.5.2`";
+  + "**resumed**, at version `0.5.6`";
 
 const ban = (doc, shape, needle, why) => ({ kind: "ban", doc, shape, needle, why });
 const need = (doc, shape, needle, why) => ({ kind: "require", doc, shape, needle, why });
@@ -358,7 +360,7 @@ const NEEDLE_CLAIMS = [
   // 2026-09-20 incident turned red with nobody watching.
   need(APPS, "flat", IOS_STATUS_SENTENCE, WHY.iosStatus),
   ban(APPS, "flat", "are engineering builds distributed through internal TestFlight", WHY.iosStatus),
-  need(APPS, "flat", "**In development at 0.5.2 and not public**", WHY.iosStatus),
+  need(APPS, "flat", "**In development at 0.5.6 and not public**", WHY.iosStatus),
   need(APPS, "flat", "**Development resumed 2026-09-01, at version 0.3.0.**", WHY.iosStatus),
   ban(APPS, "flat", "**Development paused", WHY.iosStatus),
   ban(README, "flat", "The iOS app runs its transfer, nearby and account workflows", WHY.iosStatus),
@@ -400,9 +402,14 @@ const NEEDLE_CLAIMS = [
   need(README, "deliveryFlat", ROOT_IOS_STATE, WHY.iosRow),
   need(README, "deliveryFlat", "It has never been publicly released", WHY.iosRow),
   need(README, "deliveryLower", "no app store listing", WHY.iosRow),
-  need(README, "row:iPhone, iPad, Windows, Linux", "web app", WHY.browsersRow),
-  need(README, "row:iPhone, iPad, Windows, Linux", "publishes no app for these platforms", WHY.browsersRow),
-  ban(README, "row:iPhone, iPad, Windows, Linux", "android", WHY.browsersRow),
+  need(README, "row:iPhone, iPad, Linux", "web app", WHY.browsersRow),
+  need(README, "row:iPhone, iPad, Linux", "no public native app is offered for these platforms", WHY.browsersRow),
+  ban(README, "row:iPhone, iPad, Linux", "android", WHY.browsersRow),
+  ban(README, "row:iPhone, iPad, Linux", "windows", WHY.browsersRow),
+  need(README, "row:Windows", "unsigned x64 desktop preview", WHY.windowsRow),
+  need(README, "row:Windows", "web app or cli", WHY.windowsRow),
+  need(README, "row:Windows", "automatic updating is not enabled", WHY.windowsRow),
+  need(README, "flatLower", "in-app email/password login", WHY.windowsRow),
   need(README, "row:Android", "apk", WHY.androidRow),
   need(README, "row:Android", "no google play listing", WHY.androidRow),
   need(README, "row:Android", "foreground only", WHY.androidRow),
@@ -416,7 +423,7 @@ const NEEDLE_CLAIMS = [
   // Was `testTheReadmeOffersNoIOSDownload`.
   ...["download the ios app", "get it on the app store", "testflight.apple.com"]
     .map((offer) => ban(README, "flatLower", offer, WHY.iosOffer)),
-  need(README, "flatLower", "there is no relayium app for ios or windows", WHY.iosOffer),
+  need(README, "flatLower", "there is no public ios app", WHY.iosOffer),
   need(README, "flatLower", "an android public preview is published as a direct apk", WHY.iosOffer),
   ...["no relayium app for android", "relayium app for ios, android or windows",
     "publishes no android app"].map((denial) => ban(README, "flatLower", denial, WHY.iosOffer)),
@@ -625,9 +632,11 @@ function evaluate(world) {
   // -- was `testTheReadmeDoesNotListIOSAsADeliveryPlatform`, row-presence half
   claim("row-absent|iOS", haystack(doc(README), "row:iOS") === null,
     `${README}: iOS is back in the delivery-status table — ${WHY.iosRow}`);
-  claim("row-present|iPhone, iPad, Windows, Linux",
-    haystack(doc(README), "row:iPhone, iPad, Windows, Linux") !== null,
+  claim("row-present|iPhone, iPad, Linux",
+    haystack(doc(README), "row:iPhone, iPad, Linux") !== null,
     `${README}: the no-native-app platforms lost their delivery-status row — ${WHY.browsersRow}`);
+  claim("row-present|Windows", haystack(doc(README), "row:Windows") !== null,
+    `${README}: Windows has no independent preview row — ${WHY.windowsRow}`);
   claim("row-present|Android", haystack(doc(README), "row:Android") !== null,
     `${README}: Android has no delivery-status row of its own — ${WHY.androidRow}`);
 
@@ -739,11 +748,11 @@ const realMacBuild = realMac.build;
 const MUTATIONS = [
   // -- the incident, replayed: the document moves and the pin does not
   { name: "INCIDENT: apps/README.md moves the iOS development version without this pin moving",
-    world: () => sub(APPS, "**In development at 0.5.2 and not public**",
+    world: () => sub(APPS, "**In development at 0.5.6 and not public**",
       "**In development at 0.4.2 and not public**"),
-    expect: [`require|${APPS}|flat|**In development at 0.5.2 and not public**`] },
+    expect: [`require|${APPS}|flat|**In development at 0.5.6 and not public**`] },
   { name: "INCIDENT: the root README moves the iOS development version without this pin moving",
-    world: () => sub(README, "at version `0.5.2`", "at version `0.4.2`"),
+    world: () => sub(README, "at version `0.5.6`", "at version `0.4.2`"),
     expect: [`require|${README}|flat|${ROOT_IOS_STATE}`, `require|${README}|deliveryFlat|${ROOT_IOS_STATE}`] },
 
   { name: "INCIDENT: 583760be4 — the release bump leaves the headline at 1.4.3 (40) while the manifest says 1.4.4",
@@ -833,9 +842,13 @@ const MUTATIONS = [
     world: () => sub(README, "\n| **Android** |", "\n| **iOS** | Internal TestFlight | In development. |\n| **Android** |"),
     expect: ["row-absent|iOS"] },
   { name: "the no-native-app row is deleted",
-    world: () => sub(README, "| **iPhone, iPad, Windows, Linux** |", "| **Other platforms** |"),
-    expect: ["row-present|iPhone, iPad, Windows, Linux", `require|${README}|row:iPhone, iPad, Windows, Linux|web app`,
-      `ban|${README}|row:iPhone, iPad, Windows, Linux|android`] },
+    world: () => sub(README, "| **iPhone, iPad, Linux** |", "| **Other platforms** |"),
+    expect: ["row-present|iPhone, iPad, Linux", `require|${README}|row:iPhone, iPad, Linux|web app`,
+      `ban|${README}|row:iPhone, iPad, Linux|android`] },
+  { name: "the Windows preview row is deleted",
+    world: () => sub(README, "| **Windows** |", "| **Other desktop** |"),
+    expect: ["row-present|Windows", `require|${README}|row:Windows|unsigned x64 desktop preview`,
+      `require|${README}|row:Windows|automatic updating is not enabled`] },
   { name: "the Android row is deleted",
     world: () => sub(README, "| **Android** |", "| **Robot** |"),
     expect: ["row-present|Android", `require|${README}|row:Android|apk`, `ban|${README}|row:Android|no device inbox`] },
@@ -866,7 +879,7 @@ const MUTATIONS = [
       `macOS\n**${realMacVersion}** is\n   published through the direct-download channel.`),
     refuse: /./ },
   { name: "the iOS status sentence is re-wrapped across lines",
-    world: () => sub(APPS, "**In development at 0.5.2 and not public**", "**In development\nat 0.5.2 and\n   not public**"),
+    world: () => sub(APPS, "**In development at 0.5.6 and not public**", "**In development\nat 0.5.6 and\n   not public**"),
     refuse: /./ },
   { name: "the affirmative Android sentence stays writable",
     world: () => append(README, "The Relayium app for Android is a public preview."),

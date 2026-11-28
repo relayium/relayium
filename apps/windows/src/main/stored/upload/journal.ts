@@ -276,7 +276,7 @@ export class UploadJournal {
       const records = await this.load();
       return records.filter(
         (record) =>
-          record.accountId === accountId && (record.state === "pending" || record.state === "ambiguous"),
+          record.accountId === accountId && (record.state === "pending" || record.state === "ambiguous" || record.state === "interrupted"),
       );
     });
   }
@@ -304,7 +304,7 @@ export class UploadJournal {
       let next = records;
       if (next.length >= this.limit) {
         const unresolved = next.filter(
-          (record) => record.state === "pending" || record.state === "ambiguous",
+          (record) => record.state === "pending" || record.state === "ambiguous" || record.state === "interrupted",
         );
         if (unresolved.length >= this.limit) throw new JournalError("at-capacity");
         // Oldest resolved records go; unknown ones never do.

@@ -3,14 +3,14 @@
   "android": {
     "available": true,
     "applicationId": "com.relayium.android",
-    "versionCode": 12,
-    "versionName": "0.3.3",
-    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.3.3/Relayium-0.3.3-12.apk",
-    "sha256": "afbefce64d56d0e5629e8c246bde43372d26576e10d2174fd11df67ac2b4cc0e",
-    "size": 46058058,
+    "versionCode": 15,
+    "versionName": "0.3.6",
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.3.6/Relayium-0.3.6-15.apk",
+    "sha256": "413dd16549b4fb7334c017dcfaf5afde8656c976bd3ba4cc81c41c1ae1764692",
+    "size": 46074442,
     "notes": {
-      "en": "Public preview 0.3.3. Nearby LAN sessions have a clearer file area with drag feedback. On Android devices supporting split screen, drag files from another app or use the file picker. Read permission lasts through asynchronous file reads and is released on completion or refusal. Files only; transfers remain foreground-only. Direct APK; no Google Play or Play Billing.",
-      "zh": "公开预览版 0.3.3。局域网“附近”连接增加清晰的文件区和拖入高亮。在支持分屏的安卓设备上，可从其他应用拖入文件，也可继续点选文件。读取权限保留到异步读取结束，在完成或拒绝时释放。拖入仅支持文件；传输仍需保持应用在前台。仅以 APK 分发，不在 Google Play 上架，不含 Play 结算。"
+      "en": "Long Device Inbox texts open as a compact preview. Expand each message separately and copy the whole original text at any time.",
+      "zh": "设备收件箱的长文本默认显示短预览，每条都可单独展开或收起，复制始终保留全文。"
     }
   }
 }

@@ -20,6 +20,7 @@ import {
   UploadTransportError,
   type AppendReceipt,
   type FinalizeReceipt,
+  type FinalizeRecoveryReceipt,
   type InitReceipt,
   type UploadByteTransport,
   type UploadRetention,
@@ -164,6 +165,13 @@ export class DeviceTaskByteTransport implements UploadByteTransport {
 
   finalize(uploadId: string, signal?: AbortSignal): Promise<FinalizeReceipt> {
     return this.inner.finalize(uploadId, signal);
+  }
+
+  /** Same authenticated original-session recovery, preserving device purpose. */
+  finalizeRecoverable(uploadId: string, signal?: AbortSignal): Promise<FinalizeRecoveryReceipt> {
+    const transport = this.inner as UploadByteTransport & { finalizeRecoverable?: (id: string, signal?: AbortSignal) => Promise<FinalizeRecoveryReceipt> };
+    if (!transport.finalizeRecoverable) throw new UploadTransportError("malformed");
+    return transport.finalizeRecoverable(uploadId, signal);
   }
 
   private url(path: string): string {

@@ -108,3 +108,62 @@ func TestFleetRolloutCannotTargetBelowOperationalMinimum(t *testing.T) {
 		t.Fatalf("refused target changed rollout state: found=%v err=%v", found, getErr)
 	}
 }
+
+func TestLocalMacPolicyRefreshPreservesFloorsAndAuditsAtomically(t *testing.T) {
+	releases, err := verifiedMacReleases()
+	if err != nil || len(releases) == 0 {
+		t.Fatalf("expected a verified release to refresh to: %v", err)
+	}
+	wantLatest := releases[len(releases)-1].Version
+
+	st := newTestStore(t)
+	ctx := context.Background()
+	now := int64(1800000000)
+	_, err = st.db.Exec(`UPDATE operational_version_policy SET revision=16,fleet_min_version='v0.25.0',mac_min_version='1.4.10',mac_min_build=47,mac_recommended_version='1.5.0',mac_latest_version='1.5.0' WHERE id=1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := st.GetOperationalVersionPolicy(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = st.AdminAuth().RefreshMacVersionPolicy(ctx, 15, now, "test"); err == nil {
+		t.Fatal("stale revision accepted")
+	}
+	// An audit-write failure must roll back the policy change, not leave an
+	// unaudited successful refresh.
+	if _, err = st.db.Exec(`CREATE TRIGGER refuse_refresh_audit BEFORE INSERT ON admin_audit BEGIN SELECT RAISE(ABORT,'test audit failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = st.AdminAuth().RefreshMacVersionPolicy(ctx, 16, now, "test"); err == nil {
+		t.Fatal("audit failure ignored")
+	}
+	after, err := st.GetOperationalVersionPolicy(ctx)
+	if err != nil || after != before {
+		t.Fatal("partial refresh survived failed audit", after, err)
+	}
+	if _, err = st.db.Exec(`DROP TRIGGER refuse_refresh_audit`); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := st.AdminAuth().RefreshMacVersionPolicy(ctx, 16, now, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Revision != 17 || updated.FleetMinimumVersion != "v0.25.0" || updated.MacMinimumVersion != "1.4.10" || updated.MacMinimumBuild != 47 || updated.MacRecommendedVersion != wantLatest || updated.MacLatestVersion != wantLatest {
+		t.Fatal("wrong refresh", updated)
+	}
+	var count int
+	if err = st.db.QueryRow(`SELECT count(*) FROM admin_audit WHERE auth='cli' AND action=?`, AuditVersionPolicy).Scan(&count); err != nil || count != 1 {
+		t.Fatal("missing/duplicate audit", count, err)
+	}
+	repeated, err := st.AdminAuth().RefreshMacVersionPolicy(ctx, 17, now+1, "test")
+	if err != nil || repeated != updated {
+		t.Fatal("no-op refresh changed policy", repeated, err)
+	}
+	if _, err = st.db.Exec(`UPDATE operational_version_policy SET mac_latest_version='9.0.0' WHERE id=1`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = st.AdminAuth().RefreshMacVersionPolicy(ctx, 17, now, "test"); err == nil {
+		t.Fatal("downgrade accepted")
+	}
+}

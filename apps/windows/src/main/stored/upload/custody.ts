@@ -20,9 +20,10 @@
 //
 // ## Retirement needs proof
 //
-// `retire` is called only when the published object is provably gone — a
-// server 404 on delete, or an explicit user deletion that succeeded. It is
-// NEVER called on sign-out, on a generic error, or because a job failed: a key
+// Share callers retire only when the object is provably gone. Device-task
+// callers may also retire after the exact recipient-wrapped key/request and
+// authenticated task commit are durable, and local text history is secured.
+// It is NEVER called on sign-out, a generic error, or because a job failed: a key
 // deleted while its ciphertext still exists on the server is a share the user
 // can never open again, which is silent data loss dressed as tidying up.
 
@@ -157,12 +158,15 @@ export class UploadKeyCustody {
   }
 
   /**
-   * Forget a key whose object is provably gone.
+   * Forget a key with proof of deletion or durable recipient-key custody.
    *
    * The caller supplies the proof; this method only records the decision. It is
    * deliberately not reachable from a sign-out path or an error handler.
    */
-  async retire(jobId: string, proof: "server-absent" | "user-deleted"): Promise<void> {
+  async retire(jobId: string, proof: "server-absent" | "user-deleted" | "task-key-wrapped"): Promise<void> {
+    // Device-task exception: the caller has durably recorded the exact wrapped
+    // key/request AND the authenticated task commit. Recovery needs that
+    // request, not the raw upload key. Share callers never have this proof.
     void proof; // named in the signature so a caller must state one
     try {
       await this.secrets.delete(slotFor(jobId));

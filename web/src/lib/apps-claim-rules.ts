@@ -159,16 +159,16 @@ export const FORBIDDEN_APP_CLAIMS: ClaimRule[] = [
     // native-app promise — so "web app", "browser" and their Chinese
     // equivalents are subtracted before the ban is applied, and "the web app on
     // iPhone" stays sayable.
-    why: "this repository ships no iOS or Windows app to promise",
-    re: /\b(?:iOS|iPhone|iPad|Windows)\s+(?:native\s+|desktop\s+|companion\s+|mobile\s+)*(?:app|application|client)\b|\b(?:native\s+|desktop\s+|companion\s+|mobile\s+)*(?:app|application|client)\s+(?:for|on)\s+(?:iOS|iPhone|iPad|Windows)\b|\b(?:iOS|iPhone|iPad|Windows)\s+version of the (?:app|client)\b|(?:iOS|iPhone|iPad|Windows)\s*(?:桌面|移动)?(?:原生)?(?:应用|客户端)|(?:原生)?(?:应用|客户端)[^。，；]{0,4}(?:适用于|支持|登陆)\s*(?:iOS|iPhone|iPad|Windows)/i,
+    why: "this repository ships no iOS app to promise",
+    re: /\b(?:iOS|iPhone|iPad)\s+(?:native\s+|desktop\s+|companion\s+|mobile\s+)*(?:app|application|client)\b|\b(?:native\s+|desktop\s+|companion\s+|mobile\s+)*(?:app|application|client)\s+(?:for|on)\s+(?:iOS|iPhone|iPad)\b|\b(?:iOS|iPhone|iPad)\s+version of the (?:app|client)\b|(?:iOS|iPhone|iPad)\s*(?:桌面|移动)?(?:原生)?(?:应用|客户端)|(?:原生)?(?:应用|客户端)[^。，；]{0,4}(?:适用于|支持|登陆)\s*(?:iOS|iPhone|iPad)/i,
     allow: /\b(?:web|browser|progressive\s+web|mobile\s+web)\s+(?:app|application|client)\b|\bin (?:the )?(?:browser|Safari|Chrome)\b|网页(?:应用|版)|浏览器(?:里|中|内)?/gi,
     probes: [
       "the iOS app is in development",
-      "A native Windows desktop app is being built",
+      "A native iOS mobile app is being built",
       "our client on iPhone",
-      "the Windows version of the app",
+      "the iOS version of the app",
       "iOS 应用仍在开发中",
-      "客户端支持 Windows",
+      "客户端支持 iOS",
     ],
     permitted: [
       // True today, and the page has to be able to keep saying it.

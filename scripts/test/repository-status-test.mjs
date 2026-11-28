@@ -63,7 +63,7 @@ describe("public repository status", () => {
     assert.match(delivery, /never been publicly released/i);
     assert.match(delivery, /no App Store listing/i);
     // …and the platforms that have no app must still be told what to use.
-    const browserRow = statusRows["iPhone, iPad, Windows, Linux"] ?? "";
+    const browserRow = statusRows["iPhone, iPad, Linux"] ?? "";
     assert.ok(browserRow.includes("web app"), "the no-native-app platforms lost their row");
     // Android moved OUT of that row into one of its own when the APK was
     // published; it must have a row, and that row must carry the preview's
@@ -85,7 +85,12 @@ describe("public repository status", () => {
     // folder to pick and none to reconnect, so copy borrowed from the Mac
     // receiver would send a reader looking for a control that does not exist.
     assert.doesNotMatch(androidRow, /receive folder|folder you (?:pick|chose|choose)|choose a folder/i, "the row claims a user-chosen receive folder Android has no such thing");
-    assert.match(browserRow, /publishes no app for these platforms/i);
+    assert.match(browserRow, /no public native app is offered for these platforms/i);
+    assert.doesNotMatch(browserRow, /Windows/i);
+    const windowsRow = statusRows.Windows ?? "";
+    assert.match(windowsRow, /unsigned x64 desktop preview/i, "Windows needs its own truthful preview row");
+    assert.match(windowsRow, /automatic updating is not enabled/i);
+    assert.match(windowsRow, /web app or CLI/i);
     // Distribution truth, matched by shape rather than by one exact sentence, so
     // it survives an ordinary rewrite of the surrounding prose.
     //

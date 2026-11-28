@@ -24,6 +24,7 @@ type adminSettingsView struct {
 }
 
 type adminHomeData struct {
+	adminRouteData
 	// Section is the route-owned page rendered by the shared template.
 	Section string
 	// Lang selects the console language for this request (admin_i18n.go).
@@ -211,6 +212,7 @@ type adminFleetTokenView struct {
 }
 
 type adminLoginData struct {
+	adminRouteData
 	// Lang selects the console language for this request (see admin_i18n.go).
 	// It lives on the data rather than in the FuncMap because templates are
 	// parsed once at package init and the language varies per request.
@@ -226,6 +228,7 @@ type adminLoginData struct {
 // adminEnrollData is passed to adminEnrollTmpl. It carries no enrollment
 // state: the grant lives only in the URL fragment the page's script reads.
 type adminEnrollData struct {
+	adminRouteData
 	Lang  string
 	Nonce string
 }
@@ -234,6 +237,7 @@ type adminEnrollData struct {
 // page): the diff a pending high-risk write would apply, plus the token that
 // identifies it so the confirm POST can retrieve (and burn) it.
 type confirmPageData struct {
+	adminRouteData
 	// Lang selects the console language for this request (admin_i18n.go). It is
 	// on the data, not in the FuncMap, because templates parse once at package
 	// init while the language varies per request.
@@ -355,30 +359,30 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 {{if .HaltedReason}}<p class="err">{{t $.Lang "中止原因："}}{{.HaltedReason}}</p>{{end}}
 
 <div class="ro-ctl">
-<form method="post" action="/admin/rollout/{{.Track}}/target" class="lim">
+<form method="post" action="{{$.AdminPath}}/rollout/{{.Track}}/target" class="lim">
 <input type="text" name="version" placeholder="v1.2.3" title="{{t $.Lang "目标版本（vMAJOR.MINOR.PATCH）"}}" style="width:110px">
 <button type="submit">{{t $.Lang "设定目标版本"}}</button>
 </form>
 {{if eq .Status "rolling"}}
-<form method="post" action="/admin/rollout/{{.Track}}/pause" class="lim"
+<form method="post" action="{{$.AdminPath}}/rollout/{{.Track}}/pause" class="lim"
   onsubmit="return confirm('{{t $.Lang "暂停该轨的发布？"}} {{.Track}}')"><button type="submit">{{t $.Lang "暂停"}}</button></form>
 {{end}}
 {{if eq .Status "halted"}}
-<form method="post" action="/admin/rollout/{{.Track}}/resume" class="lim"
+<form method="post" action="{{$.AdminPath}}/rollout/{{.Track}}/resume" class="lim"
   onsubmit="return confirm('{{t $.Lang "继续该轨的发布？将从头重新分批。"}} {{.Track}}')"><button type="submit">{{t $.Lang "继续"}}</button></form>
 {{end}}
-<form method="post" action="/admin/rollout/{{.Track}}/rollback" class="lim"
+<form method="post" action="{{$.AdminPath}}/rollout/{{.Track}}/rollback" class="lim"
   onsubmit="return confirm('{{t $.Lang "把该轨回滚到这个版本？"}} {{.Track}}')">
 <input type="text" name="version" placeholder="v1.2.2" title="{{t $.Lang "回滚到的版本"}}" style="width:110px">
 <button type="submit">{{t $.Lang "回滚"}}</button>
 </form>
 {{if .PreviousVersion}}
-<form method="post" action="/admin/rollout/{{.Track}}/rollback-previous" class="lim"
+<form method="post" action="{{$.AdminPath}}/rollout/{{.Track}}/rollback-previous" class="lim"
   onsubmit="return confirm('{{t $.Lang "回滚到上一版本？"}} {{.PreviousVersion}}')">
 <button type="submit" title="{{t $.Lang "回到该轨上一个目标版本；该版本当初已通过机队门槛，因此不受机队当前发布状态影响"}}">{{t $.Lang "回滚到上一版本（"}}{{.PreviousVersion}}）</button>
 </form>
 {{end}}
-<form method="post" action="/admin/rollout/{{.Track}}/emergency" class="lim">
+<form method="post" action="{{$.AdminPath}}/rollout/{{.Track}}/emergency" class="lim">
 <input type="text" name="version" placeholder="v1.2.4" title="{{t $.Lang "紧急发布的版本"}}" style="width:110px">
 <button type="submit" class="danger">{{t $.Lang "紧急发布"}}</button>
 </form>
@@ -396,13 +400,13 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
      共用同一套守卫），差别只有一处——首台要不要保留 6 小时观察窗。把保留的那个
      放在前面，是因为"这个版本机队还没跑过"才是常态，而上面那个只有在某台机队
      节点已经完整观察过这个版本之后才成立。 */}}
-<form method="post" action="/admin/rollout/fleet/fast-canary" class="lim">
+<form method="post" action="{{$.AdminPath}}/rollout/fleet/fast-canary" class="lim">
 <input type="hidden" name="from_status" value="{{.Status}}">
 <input type="hidden" name="from_version" value="{{.TargetVersion}}">
 <input type="text" name="version" placeholder="v1.2.4" title="{{t $.Lang "安全快速发布的版本"}}" style="width:110px">
 <button type="submit" title="{{t $.Lang "立刻开始一轮机队发布：第一台完整保留 6 小时观察窗并且必须回报成功，之后的节点之间不再等待；仍一次一台，任一台没有回报成功即中止"}}">{{t $.Lang "安全快速发布（保留首台观察窗）"}}</button>
 </form>
-<form method="post" action="/admin/rollout/fleet/fast" class="lim">
+<form method="post" action="{{$.AdminPath}}/rollout/fleet/fast" class="lim">
 <input type="hidden" name="from_status" value="{{.Status}}">
 <input type="hidden" name="from_version" value="{{.TargetVersion}}">
 <input type="text" name="version" placeholder="v1.2.4" title="{{t $.Lang "手动快速发布的版本"}}" style="width:110px">
@@ -425,7 +429,7 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
      只有机队轨有「被越过」这个概念（decideByo 的候选集不看 update_result），
      自带节点轨上这个按钮什么也做不到。handler 会重新读全部条件，按钮不在场
      不等于守卫在场。 */}}
-{{if and (eq $.Track "fleet") .PassedOver (eq $.Status "complete")}}<form method="post" action="/admin/rollout/{{$.Track}}/retry" class="lim"
+{{if and (eq $.Track "fleet") .PassedOver (eq $.Status "complete")}}<form method="post" action="{{$.AdminPath}}/rollout/{{$.Track}}/retry" class="lim"
   onsubmit="return confirm('{{t $.Lang "重新下发？该轨道会回到发布中。"}} {{.ID}} → {{$.TargetVersion}}')">
 <input type="hidden" name="node" value="{{.ID}}">
 <button type="submit" title="{{t $.Lang "把这台重新放回发布队列；不改目标版本"}}">{{t $.Lang "重试"}}</button>
@@ -462,7 +466,7 @@ button:hover{filter:brightness(1.07)}
 .err{color:#e5484d;margin:0 0 10px}
 .muted{color:var(--muted);margin:0 0 10px}
 [hidden]{display:none!important}.langpick{display:inline-flex;gap:0;border:1px solid var(--bd);border-radius:7px;overflow:hidden}.langpick button{font:inherit;font-size:12px;padding:3px 8px;border:0;background:transparent;color:var(--muted);cursor:pointer;width:auto;margin:0}.langpick button.on{background:var(--a);color:#fff}</style></head>
-<body><div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 16px"><h1 style="margin:0">{{t $.Lang "Relayium 后台"}}</h1><form method="post" action="/admin/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form></div>
+<body><div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 16px"><h1 style="margin:0">{{t $.Lang "Relayium 后台"}}</h1><form method="post" action="{{$.AdminPath}}/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form></div>
 {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
 {{if .Passkey}}
 <button type="button" id="passkey-login">{{t $.Lang "使用 passkey 登录"}}</button>
@@ -483,7 +487,7 @@ button:hover{filter:brightness(1.07)}
 {{template "passkeyB64"}}
   btn.addEventListener('click', function(){
     err.hidden = true; btn.disabled = true;
-    fetch('/admin/passkey/login/begin', {method:'POST'})
+    fetch('{{$.AdminPath}}/passkey/login/begin', {method:'POST'})
       .then(function(r){
         if (r.ok) return r.json();
         // A non-JSON body (a proxy's 502 page) must not surface as a parser
@@ -498,7 +502,7 @@ button:hover{filter:brightness(1.07)}
         return navigator.credentials.get({publicKey: pk});
       })
       .then(function(c){
-        return fetch('/admin/passkey/login/finish', {
+        return fetch('{{$.AdminPath}}/passkey/login/finish', {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
             id: c.id, rawId: enc(c.rawId), type: c.type,
@@ -512,7 +516,7 @@ button:hover{filter:brightness(1.07)}
         });
       })
       .then(function(r){
-        if (r.ok) { location.href = '/admin'; return; }
+        if (r.ok) { location.href = '{{$.AdminPath}}'; return; }
         return r.json().then(function(j){ return j.error; }, function(){ return null; })
           .then(function(m){ throw new Error(m || '{{t $.Lang "验证失败（服务器 "}}' + r.status + '）'); });
       })
@@ -631,7 +635,7 @@ button:hover{filter:brightness(1.07)}
 <p class="muted">{{t $.Lang "该操作没有逐字段的差异可展示，请确认操作本身无误。"}}</p>
 {{end}}
 
-<form method="post" action="/admin/confirm" id="confirm-form">
+<form method="post" action="{{$.AdminPath}}/confirm" id="confirm-form">
 <input type="hidden" name="confirm_token" value="{{.Token}}">
 {{if .NeedFactor}}
 {{if eq .Factor "passkey"}}
@@ -650,7 +654,7 @@ button:hover{filter:brightness(1.07)}
 {{else if not .NeedFactor}}
 <button type="submit">{{t $.Lang "确认执行"}}</button>
 {{end}}
-<a href="/admin">{{t $.Lang "取消"}}</a>
+<a href="{{$.AdminPath}}">{{t $.Lang "取消"}}</a>
 </div>
 </form>
 {{if and .NeedFactor (eq .Factor "passkey")}}
@@ -672,7 +676,7 @@ button:hover{filter:brightness(1.07)}
 {{template "passkeyB64"}}
   btn.addEventListener('click', function(){
     err.hidden = true; btn.disabled = true;
-    fetch('/admin/stepup/passkey/begin', {method:'POST'})
+    fetch('{{$.AdminPath}}/stepup/passkey/begin', {method:'POST'})
       .then(function(r){
         if (r.ok) return r.json();
         return r.json().then(function(j){ return j.error; }, function(){ return null; })
@@ -687,7 +691,7 @@ button:hover{filter:brightness(1.07)}
       .then(function(c){
         // The assertion rides the confirm form as a hidden field (not a
         // separate fetch) so confirm_token and the factor are submitted
-        // together to /admin/confirm in one request.
+        // together to {{$.AdminPath}}/confirm in one request.
         field.value = JSON.stringify({
           id: c.id, rawId: enc(c.rawId), type: c.type,
           response: {
@@ -786,7 +790,7 @@ code{background:var(--soft);border-radius:4px;padding:1px 5px;word-break:break-a
   }
   btn.addEventListener('click', function(){
     err.hidden = true; btn.disabled = true;
-    post('/admin/enroll/begin', {grant: grant})
+    post('{{$.AdminPath}}/enroll/begin', {grant: grant})
       .then(function(o){
         var pk = o.publicKey;
         pk.challenge = dec(pk.challenge);
@@ -795,7 +799,7 @@ code{background:var(--soft);border-radius:4px;padding:1px 5px;word-break:break-a
         return navigator.credentials.create({publicKey: pk});
       })
       .then(function(c){
-        return post('/admin/enroll/finish', {grant: grant, credential: {
+        return post('{{$.AdminPath}}/enroll/finish', {grant: grant, credential: {
           id: c.id, rawId: enc(c.rawId), type: c.type,
           response: {
             clientDataJSON: enc(c.response.clientDataJSON),
@@ -956,15 +960,15 @@ td .off{color:var(--muted);opacity:.7}
 <body>
 <div class="top"><h1>{{if eq .Section "users"}}{{t $.Lang "用户"}}{{else if eq .Section "fleet"}}{{t $.Lang "机队"}}{{else}}{{t $.Lang "后台概览"}}{{end}}</h1>
 <div style="display:flex;gap:12px;align-items:center">
-<form method="post" action="/admin/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form>
-<form method="post" action="/admin/logout"><button type="submit">{{t $.Lang "退出"}}</button></form>
+<form method="post" action="{{$.AdminPath}}/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form>
+<form method="post" action="{{$.AdminPath}}/logout"><button type="submit">{{t $.Lang "退出"}}</button></form>
 </div></div>
 <nav class="tabs" aria-label="Relayium Admin">
-<a href="/admin"{{if eq .Section "overview"}} aria-current="page"{{end}}>{{t $.Lang "后台概览"}}</a>
-<a href="/admin/users"{{if eq .Section "users"}} aria-current="page"{{end}}>{{t $.Lang "用户"}}</a>
-<a href="/admin/fleet"{{if eq .Section "fleet"}} aria-current="page"{{end}}>{{t $.Lang "机队"}}</a>
-<a href="/admin/version-policy">{{t $.Lang "版本策略"}}</a>
-<a href="/admin/audit">{{t $.Lang "审计日志"}}</a>
+<a href="{{$.AdminPath}}"{{if eq .Section "overview"}} aria-current="page"{{end}}>{{t $.Lang "后台概览"}}</a>
+<a href="{{$.AdminPath}}/users"{{if eq .Section "users"}} aria-current="page"{{end}}>{{t $.Lang "用户"}}</a>
+<a href="{{$.AdminPath}}/fleet"{{if eq .Section "fleet"}} aria-current="page"{{end}}>{{t $.Lang "机队"}}</a>
+<a href="{{$.AdminPath}}/version-policy">{{t $.Lang "版本策略"}}</a>
+<a href="{{$.AdminPath}}/audit">{{t $.Lang "审计日志"}}</a>
 </nav>
 
 {{if eq .Section "fleet"}}
@@ -975,21 +979,21 @@ td .off{color:var(--muted);opacity:.7}
 <div class="halt">
 <b>{{t $.Lang "有新版本："}}{{.LatestTag}}</b>{{if .TargetTag}} {{t $.Lang "· 当前目标"}} {{.TargetTag}}{{else}} {{t $.Lang "· 尚未配置发布目标"}}{{end}}
 {{if .OfferButton}}
-<form method="post" action="/admin/release/rollout" class="lim"
+<form method="post" action="{{$.AdminPath}}/release/rollout" class="lim"
   onsubmit="return confirm('{{t $.Lang "把机队轨的目标版本设为该版本并开始发布？"}} {{.LatestTag}}')">
 <input type="hidden" name="version" value="{{.LatestTag}}">
 <button type="submit">{{t $.Lang "发布"}} {{.LatestTag}} {{t $.Lang "到机队"}}</button></form>
 {{else}}
 <div class="halt-why">{{t $.Lang "机队轨上有一次发布尚未结束（目标"}} {{.TargetTag}}{{t $.Lang "，正在发布或已暂停），此处不提供一键发布：那会中止它、清掉记录在案的发布位置并从头开始，已暂停的发布也就无法再原样继续。要改目标请到下方机队面板手动设定。"}}</div>
 {{end}}
-<form method="post" action="/admin/release/dismiss" class="lim">
+<form method="post" action="{{$.AdminPath}}/release/dismiss" class="lim">
 <input type="hidden" name="version" value="{{.LatestTag}}">
 <button type="submit">{{t $.Lang "忽略此版本"}}</button></form>
 </div>
 </section>
 {{else if .DismissedTag}}
 <div style="color:var(--muted);font-size:12px">{{t $.Lang "已忽略"}} {{.DismissedTag}} ·
-<form method="post" action="/admin/release/dismiss" class="lim" style="display:inline">
+<form method="post" action="{{$.AdminPath}}/release/dismiss" class="lim" style="display:inline">
 <input type="hidden" name="version" value="">
 <button type="submit">{{t $.Lang "撤销"}}</button></form></div>
 {{end}}
@@ -1024,7 +1028,7 @@ td .off{color:var(--muted);opacity:.7}
 <section class="funnel" aria-labelledby="activation-funnel-title">
 <div class="top">
 <h2 id="activation-funnel-title">{{if eq $.Lang "en"}}Cross-network activation actions{{else}}跨网络激活动作{{end}}</h2>
-<form method="get" action="/admin" class="search">
+<form method="get" action="{{$.AdminPath}}" class="search">
 <label>{{if eq $.Lang "en"}}UTC month{{else}}UTC 月份{{end}}
 <select name="period" onchange="this.form.submit()">
 {{$sel := .Period}}{{range .Months}}<option value="{{.}}"{{if eq . $sel}} selected{{end}}>{{period .}}</option>{{end}}
@@ -1062,7 +1066,7 @@ td .off{color:var(--muted);opacity:.7}
 </div>
 {{end}}
 
-<form method="post" action="/admin/nodes/token" class="mint">
+<form method="post" action="{{$.AdminPath}}/nodes/token" class="mint">
 <input type="text" name="name" placeholder="{{t $.Lang "节点备注名（如 cn-shanghai-1）"}}">
 <button type="submit">{{t $.Lang "生成节点 Token"}}</button>
 </form>
@@ -1076,9 +1080,9 @@ td .off{color:var(--muted);opacity:.7}
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{.Region}}</td>
 <td>{{if .Removed}}<span class="err">{{t $.Lang "已卸载"}}</span>
-<form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('{{t $.Lang "恢复该节点？它会重新进入放置/ICE/直连下载。"}}')"><button type="submit" title="{{t $.Lang "清除已卸载标记，让节点重新上线（不影响它的文件与历史）"}}">{{t $.Lang "恢复"}}</button></form>
+<form method="post" action="{{$.AdminPath}}/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('{{t $.Lang "恢复该节点？它会重新进入放置/ICE/直连下载。"}}')"><button type="submit" title="{{t $.Lang "清除已卸载标记，让节点重新上线（不影响它的文件与历史）"}}">{{t $.Lang "恢复"}}</button></form>
 {{else}}{{if .Online}}{{t $.Lang "在线"}}{{else}}{{t $.Lang "离线"}}{{end}}
-<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('{{t $.Lang "手动标记该节点已卸载？用于卸载脚本联系不到中央、来不及自动登记的情况；节点会退出放置/ICE/直连下载，文件与历史保留，可随时用「恢复」撤销。"}}')"><button type="submit" title="{{t $.Lang "卸载脚本未能联系中央时的人工补救：标记为已移除"}}">{{t $.Lang "标记已移除"}}</button></form>
+<form method="post" action="{{$.AdminPath}}/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('{{t $.Lang "手动标记该节点已卸载？用于卸载脚本联系不到中央、来不及自动登记的情况；节点会退出放置/ICE/直连下载，文件与历史保留，可随时用「恢复」撤销。"}}')"><button type="submit" title="{{t $.Lang "卸载脚本未能联系中央时的人工补救：标记为已移除"}}">{{t $.Lang "标记已移除"}}</button></form>
 {{end}}</td>
 <td>{{bytes .MonthRelayedBytes}} / {{bytes .RelayedBytes}} / {{if .EffectiveTrafficLimitBytes}}{{bytes .EffectiveTrafficLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StoredBytes}}{{else}}—{{end}} / {{if .DiskLimitBytes}}{{bytes .DiskLimitBytes}}{{else}}∞{{end}}</td>
@@ -1086,7 +1090,7 @@ td .off{color:var(--muted);opacity:.7}
 <td>{{if .StorageEnabled}}{{bytes .StorableBytes}}{{else}}—{{end}}</td>
 <td>
 {{if .Draining}}<span class="err">{{t $.Lang "排空中"}}</span>{{else}}{{t $.Lang "正常"}}{{end}}
-<form method="post" action="/admin/nodes/{{.ID}}/draining" class="lim">
+<form method="post" action="{{$.AdminPath}}/nodes/{{.ID}}/draining" class="lim">
 <input type="hidden" name="on" value="{{if .Draining}}0{{else}}1{{end}}">
 <button type="submit">{{if .Draining}}{{t $.Lang "取消排空"}}{{else}}{{t $.Lang "开始排空"}}{{end}}</button>
 </form>
@@ -1099,17 +1103,17 @@ td .off{color:var(--muted);opacity:.7}
 <td>{{if .StoredFileCount}}{{.StoredFileCount}} {{t $.Lang "个 /"}} {{ts .SafeToUninstallAt}}{{else}}{{t $.Lang "0 个 · 可随时卸载"}}{{end}}</td>
 <td>{{.Version}}</td>
 <td>
-<form method="post" action="/admin/nodes/{{.ID}}/label" class="lim">
+<form method="post" action="{{$.AdminPath}}/nodes/{{.ID}}/label" class="lim">
 <input type="text" name="label" value="{{.Label}}" placeholder="{{t $.Lang "备注名"}}" title="{{t $.Lang "节点备注名"}}" style="width:110px">
 <button type="submit">{{t $.Lang "改名"}}</button>
 </form>
-<form method="post" action="/admin/nodes/{{.ID}}/limits" class="lim">
+<form method="post" action="{{$.AdminPath}}/nodes/{{.ID}}/limits" class="lim">
 <input type="number" name="traffic_limit_gb" min="0" value="{{gib .TrafficLimitBytes}}" title="{{t $.Lang "流量上限 GB/月，0=用全局默认"}}">
 <input type="number" name="disk_limit_gb" min="0" value="{{gib .DiskLimitBytes}}" title="{{t $.Lang "硬盘上限 GB，0=无限"}}">
 <button type="submit">{{t $.Lang "保存"}}</button>
 </form>
 </td>
-<td>{{if .DeleteBlockersUnknown}}<span class="err">{{t $.Lang "无法读取剩余记录数，暂不提供删除"}}</span>{{else if .DeleteBlockers}}<span style="color:var(--muted);font-size:12px">{{.DeleteBlockers}} {{t $.Lang "条记录待清理（含已过期未回收的文件与上传会话），归零后才能删除"}}</span>{{else}}<form method="post" action="/admin/nodes/{{.ID}}/delete" onsubmit="return confirm('{{t $.Lang "删除该官方节点？"}}')"><button type="submit" class="danger">{{t $.Lang "删除"}}</button></form>{{end}}</td>
+<td>{{if .DeleteBlockersUnknown}}<span class="err">{{t $.Lang "无法读取剩余记录数，暂不提供删除"}}</span>{{else if .DeleteBlockers}}<span style="color:var(--muted);font-size:12px">{{.DeleteBlockers}} {{t $.Lang "条记录待清理（含已过期未回收的文件与上传会话），归零后才能删除"}}</span>{{else}}<form method="post" action="{{$.AdminPath}}/nodes/{{.ID}}/delete" onsubmit="return confirm('{{t $.Lang "删除该官方节点？"}}')"><button type="submit" class="danger">{{t $.Lang "删除"}}</button></form>{{end}}</td>
 </tr>
 {{end}}{{end}}
 </tbody></table>
@@ -1130,7 +1134,7 @@ td .off{color:var(--muted);opacity:.7}
 <p class="byo-warn">{{t $.Lang "这些不是我们的机器，是用户贡献的。排空/标记已移除只影响"}}<b>{{t $.Lang "该用户自己的"}}</b>{{t $.Lang "放置池与直连下载，机器本身仍在用户手里运行；先看清"}}"{{t $.Lang "剩余文件"}}"{{t $.Lang "再动手，节点上的文件没有副本。"}}</p>
 {{/* 搜索是 GET（安全方法，不带 CSRF token）。用户列表已经属于独立路由，机队
      表单不携带它的 q/sort/dir/period/page；换搜索词时两个 BYO 页码也都归 1。 */}}
-<form method="get" action="/admin/fleet" class="byo-search">
+<form method="get" action="{{$.AdminPath}}/fleet" class="byo-search">
 <input type="search" name="bq" value="{{.ByoSearch}}" placeholder="{{t $.Lang "搜索：节点 ID / 用户邮箱 / 备注名 / 区域"}}" maxlength="200" style="width:300px">
 <button type="submit">{{t $.Lang "搜索"}}</button>
 {{if .ByoSearch}}<a href="{{.ByoClearHref}}">{{t $.Lang "清除"}}</a>{{end}}
@@ -1145,13 +1149,13 @@ td .off{color:var(--muted);opacity:.7}
 <td><span style="color:var(--muted);font-size:12px">{{if .OwnerEmail}}{{.OwnerEmail}}{{else}}{{.OwnerUserID}}{{end}}</span></td>
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{if .Online}}{{t $.Lang "在线"}}{{else}}{{t $.Lang "离线"}}{{end}}
-<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('{{t $.Lang "标记该用户节点已卸载？它会退出该用户的放置池/ICE/直连下载，文件与历史保留，可随时用「恢复」撤销。"}}')"><button type="submit" title="{{t $.Lang "把这台用户节点移出服务（可恢复）"}}">{{t $.Lang "标记已移除"}}</button></form>
+<form method="post" action="{{$.AdminPath}}/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('{{t $.Lang "标记该用户节点已卸载？它会退出该用户的放置池/ICE/直连下载，文件与历史保留，可随时用「恢复」撤销。"}}')"><button type="submit" title="{{t $.Lang "把这台用户节点移出服务（可恢复）"}}">{{t $.Lang "标记已移除"}}</button></form>
 </td>
 <td>{{if .Version}}{{.Version}}{{else}}—{{end}}</td>
 <td>{{if .LastSeenAt}}{{ts .LastSeenAt}}{{else}}—{{end}}</td>
 <td>
 {{if .Draining}}<span class="err">{{t $.Lang "排空中"}}</span>{{else}}{{t $.Lang "正常"}}{{end}}
-<form method="post" action="/admin/nodes/{{.ID}}/draining" class="lim">
+<form method="post" action="{{$.AdminPath}}/nodes/{{.ID}}/draining" class="lim">
 <input type="hidden" name="on" value="{{if .Draining}}0{{else}}1{{end}}">
 <button type="submit">{{if .Draining}}{{t $.Lang "取消排空"}}{{else}}{{t $.Lang "开始排空"}}{{end}}</button>
 </form>
@@ -1182,7 +1186,7 @@ td .off{color:var(--muted);opacity:.7}
 {{/* 已卸载的自带节点：独立成节、单独一套很短的分页（adminByoRemovedShown，远小
      于上面那张表的页长），跟上面那张表用不同的样式（灰色左边框、略微淡化），
      操作员一眼就能看出这是"卸载记录 + 手动纠错"区，不会跟当前在线的机器混着
-     看、误按到"恢复"。这是 /admin/nodes/{id}/restore 的唯一入口——上面那张表
+     看、误按到"恢复"。这是 {{$.AdminPath}}/nodes/{id}/restore 的唯一入口——上面那张表
      只列未卸载节点，已卸载节点在那张表里永远不会出现。它也分页（brp）：搜索命
      中 6 台时，第 6 台不能够不着。只在有行或查询出错时渲染，免得健康的部署也要
      看一个空表。 */}}
@@ -1205,7 +1209,7 @@ td .off{color:var(--muted);opacity:.7}
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{if .Version}}{{.Version}}{{else}}—{{end}}</td>
 <td>{{if .LastSeenAt}}{{ts .LastSeenAt}}{{else}}—{{end}}</td>
-<td><form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('{{t $.Lang "恢复该用户节点？它会重新进入该用户的放置池/ICE/直连下载。"}}')"><button type="submit" title="{{t $.Lang "清除已卸载标记（不影响它的文件与历史）"}}">{{t $.Lang "恢复"}}</button></form></td>
+<td><form method="post" action="{{$.AdminPath}}/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('{{t $.Lang "恢复该用户节点？它会重新进入该用户的放置池/ICE/直连下载。"}}')"><button type="submit" title="{{t $.Lang "清除已卸载标记（不影响它的文件与历史）"}}">{{t $.Lang "恢复"}}</button></form></td>
 </tr>
 {{else}}
 {{/* 与上面的实时节点表一致：查询出错时也要在表内给一行明确的"查询失败"，
@@ -1263,7 +1267,7 @@ td .off{color:var(--muted);opacity:.7}
 <td>{{.Name}}</td><td>{{ts .CreatedAt}}</td>
 <td>{{if .LastUsedAt}}{{ts .LastUsedAt}}{{else}}—{{end}}</td>
 <td>{{if .NodeID}}{{.NodeID}}{{else}}—{{end}}</td>
-<td><form method="post" action="/admin/nodes/token/{{.ID}}/revoke" onsubmit="return confirm('{{t $.Lang "撤销该 Token？"}}')"><button type="submit" class="danger">{{t $.Lang "撤销"}}</button></form></td>
+<td><form method="post" action="{{$.AdminPath}}/nodes/token/{{.ID}}/revoke" onsubmit="return confirm('{{t $.Lang "撤销该 Token？"}}')"><button type="submit" class="danger">{{t $.Lang "撤销"}}</button></form></td>
 </tr>
 {{end}}
 </tbody></table>
@@ -1286,7 +1290,7 @@ td .off{color:var(--muted);opacity:.7}
 <tbody>
 {{range .Plans}}
 <tr><td colspan="13">
-<form method="post" action="/admin/plans" class="plan-row">
+<form method="post" action="{{$.AdminPath}}/plans" class="plan-row">
 <input type="hidden" name="id" value="{{.ID}}">
 <span>{{.ID}}</span>
 <input type="text" name="name" value="{{.Name}}" title="{{t $.Lang "名称"}}" required>
@@ -1321,13 +1325,13 @@ td .off{color:var(--muted);opacity:.7}
 <p class="err">{{t $.Lang "总闸状态读取失败，请查看服务端日志；读取恢复前不提供开关（这不等于「已暂停」）"}}</p>
 {{else if .ApplePurchaseGate.Enabled}}
 <p class="ap-gate-state"><span class="ap-live">{{t $.Lang "购买开放中"}}</span></p>
-<form method="post" action="/admin/apple-purchases" class="plan-row">
+<form method="post" action="{{$.AdminPath}}/apple-purchases" class="plan-row">
 <input type="hidden" name="enabled" value="0">
 <button type="submit">{{t $.Lang "暂停新购买"}}</button>
 </form>
 {{else}}
 <p class="ap-gate-state"><span class="ap-broken">{{t $.Lang "新购买已暂停"}}</span></p>
-<form method="post" action="/admin/apple-purchases" class="plan-row">
+<form method="post" action="{{$.AdminPath}}/apple-purchases" class="plan-row">
 <input type="hidden" name="enabled" value="1">
 <button type="submit">{{t $.Lang "恢复新购买"}}</button>
 </form>
@@ -1363,7 +1367,7 @@ td .off{color:var(--muted);opacity:.7}
 <td>{{if .UpdatedAt}}{{ts .UpdatedAt}}{{else}}—{{end}}</td>
 </tr>
 <tr><td colspan="6">
-<form method="post" action="/admin/apple-products" class="plan-row">
+<form method="post" action="{{$.AdminPath}}/apple-products" class="plan-row">
 <input type="hidden" name="bundle_id" value="{{.BundleID}}">
 <input type="hidden" name="product_id" value="{{.ProductID}}">
 <select name="plan_id" title="{{t $.Lang "套餐"}}">
@@ -1385,7 +1389,7 @@ td .off{color:var(--muted);opacity:.7}
 {{end}}
 </tbody></table>
 
-<form method="post" action="/admin/apple-products" class="plan-row ap-add">
+<form method="post" action="{{$.AdminPath}}/apple-products" class="plan-row ap-add">
 <input type="text" name="bundle_id" placeholder="{{t $.Lang "Bundle ID"}}" maxlength="{{$.AppleProductKeyMaxLen}}" required>
 <input type="text" name="product_id" placeholder="{{t $.Lang "商品 ID"}}" maxlength="{{$.AppleProductKeyMaxLen}}" required>
 <select name="plan_id" title="{{t $.Lang "套餐"}}">
@@ -1404,7 +1408,7 @@ td .off{color:var(--muted);opacity:.7}
 {{if eq .Section "fleet"}}
 <section class="settings">
 <h2>{{t $.Lang "暂存传输设置"}}</h2>
-<form method="post" action="/admin/settings" class="grid">
+<form method="post" action="{{$.AdminPath}}/settings" class="grid">
 <label>{{t $.Lang "单文件上限 (MiB)"}}<input type="number" name="max_file_size_mb" min="1" value="{{.Settings.MaxFileSizeMB}}"></label>
 <label>{{t $.Lang "每账号每日额度 (MiB)"}}<input type="number" name="daily_quota_mb" min="1" value="{{.Settings.DailyQuotaMB}}"></label>
 <label>{{t $.Lang "默认有效期 (小时)"}}<input type="number" name="default_ttl_hours" min="1" value="{{.Settings.DefaultTTLHrs}}"></label>
@@ -1453,7 +1457,7 @@ td .off{color:var(--muted);opacity:.7}
 
 {{if eq .Section "users"}}
 <div class="top"><h2>{{t $.Lang "用量月份"}}</h2>
-<form method="get" action="/admin/users" class="search">
+<form method="get" action="{{$.AdminPath}}/users" class="search">
 <input type="hidden" name="q" value="{{.Search}}"><input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}">
 <select name="period" onchange="this.form.submit()">
 {{$sel := .Period}}{{range .Months}}<option value="{{.}}"{{if eq . $sel}} selected{{end}}>{{period .}}</option>{{end}}
@@ -1462,7 +1466,7 @@ td .off{color:var(--muted);opacity:.7}
 </form></div>
 
 <div class="top"><h2>{{t $.Lang "注册用户（"}}{{.Total}}{{if eq $.Lang "en"}}){{else}}）{{end}}</h2>
-<form method="get" action="/admin/users" class="search">
+<form method="get" action="{{$.AdminPath}}/users" class="search">
 <input type="text" name="q" value="{{.Search}}" placeholder="{{t $.Lang "搜索邮箱或显示名"}}">
 <input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}"><input type="hidden" name="period" value="{{.Period}}">
 <button type="submit">{{t $.Lang "搜索"}}</button>
@@ -1491,7 +1495,7 @@ td .off{color:var(--muted);opacity:.7}
 <td>{{bytes .UploadBytes}}</td><td>{{bytes .DownloadBytes}}</td>
 <td>{{bytes .RelayedBytes}}</td><td>{{bytes .StorageBytes}}</td>
 <td>
-<form method="post" action="/admin/users/plan" class="plan-row">
+<form method="post" action="{{$.AdminPath}}/users/plan" class="plan-row">
 <input type="hidden" name="user_id" value="{{.ID}}">
 <select name="plan_id">
 {{$cur := .PlanID}}{{range $plans}}<option value="{{.ID}}"{{if eq .ID $cur}} selected{{end}}>{{.Name}}</option>{{end}}
@@ -1515,7 +1519,7 @@ td .off{color:var(--muted);opacity:.7}
      expired rather than hidden — an operator investigating why an account lost
      access needs to see that a comp ran out, not an empty cell. */}}
 {{if .AdminGrantPlanID}}{{if gt .AdminGrantExpiresAt $now}}<div><strong>{{.AdminGrantPlanID}}</strong> · {{t $.Lang "到期"}} {{ts .AdminGrantExpiresAt}} UTC</div>{{else}}<div class="off">{{.AdminGrantPlanID}} · {{t $.Lang "已过期"}} {{ts .AdminGrantExpiresAt}} UTC</div>{{end}}{{else}}—{{end}}
-<form method="post" action="/admin/users/grant" class="plan-row">
+<form method="post" action="{{$.AdminPath}}/users/grant" class="plan-row">
 <input type="hidden" name="user_id" value="{{.ID}}">
 <select name="plan_id" aria-label="{{t $.Lang "授权套餐"}}">
 {{range $grantable}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
@@ -1555,6 +1559,7 @@ type adminAuditRow struct {
 }
 
 type adminAuditData struct {
+	adminRouteData
 	Lang     string // console language for this request (admin_i18n.go)
 	Rows     []adminAuditRow
 	Actions  []string // known action constants (audit.go's auditActions), for the filter dropdown
@@ -1588,10 +1593,10 @@ tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:var(--soft)}
 .pager .off{color:var(--muted);opacity:.55}
 :focus-visible{outline:2px solid var(--a);outline-offset:2px}.langpick{display:inline-flex;gap:0;border:1px solid var(--bd);border-radius:7px;overflow:hidden}.langpick button{font:inherit;font-size:12px;padding:3px 8px;border:0;background:transparent;color:var(--muted);cursor:pointer;width:auto;margin:0}.langpick button.on{background:var(--a);color:#fff}.tabs{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 22px}.tabs a{color:var(--muted);text-decoration:none;font-weight:600}.tabs a[aria-current=page]{color:var(--a)}</style></head>
 <body>
-<div class="top"><h1>{{t $.Lang "审计日志"}}</h1><form method="post" action="/admin/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form></div>
-<nav class="tabs" aria-label="Relayium Admin"><a href="/admin">{{t $.Lang "后台概览"}}</a><a href="/admin/users">{{t $.Lang "用户"}}</a><a href="/admin/fleet">{{t $.Lang "机队"}}</a><a href="/admin/version-policy">{{t $.Lang "版本策略"}}</a><a href="/admin/audit" aria-current="page">{{t $.Lang "审计日志"}}</a></nav>
+<div class="top"><h1>{{t $.Lang "审计日志"}}</h1><form method="post" action="{{$.AdminPath}}/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form></div>
+<nav class="tabs" aria-label="Relayium Admin"><a href="{{$.AdminPath}}">{{t $.Lang "后台概览"}}</a><a href="{{$.AdminPath}}/users">{{t $.Lang "用户"}}</a><a href="{{$.AdminPath}}/fleet">{{t $.Lang "机队"}}</a><a href="{{$.AdminPath}}/version-policy">{{t $.Lang "版本策略"}}</a><a href="{{$.AdminPath}}/audit" aria-current="page">{{t $.Lang "审计日志"}}</a></nav>
 
-<form method="get" action="/admin/audit" class="filter">
+<form method="get" action="{{$.AdminPath}}/audit" class="filter">
 <select name="action" onchange="this.form.submit()">
 <option value=""{{if eq .Action ""}} selected{{end}}>{{t $.Lang "全部动作"}}</option>
 {{$sel := .Action}}{{range .Actions}}<option value="{{.}}"{{if eq . $sel}} selected{{end}}>{{.}}</option>{{end}}

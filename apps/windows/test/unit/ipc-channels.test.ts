@@ -15,6 +15,7 @@
 // that channel fails at runtime, and nothing goes red unless a smoke happens to
 // drive that exact channel. There are 99 of them and the smokes reach a subset.
 import { describe, expect, it } from "vitest";
+import { IPC_CHANNELS } from "../../src/shared/ipc-contract.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -32,6 +33,16 @@ const missing = (from: Set<string>, of: Set<string>): string[] =>
   [...of].filter((channel) => !from.has(channel)).sort();
 
 describe("the IPC channel names", () => {
+  it("keeps the separately reviewed real-Electron request list exact", () => {
+    const source = readFileSync(fileURLToPath(new URL("../smoke/smoke-main.mjs", import.meta.url)), "utf8");
+    const declaration = source.match(/\bconst declared = \[([\s\S]*?)\n  \];/);
+    expect(declaration, "the smoke request declaration was not found").not.toBeNull();
+    const reviewed = channelsIn(declaration![1]!);
+    const requests = new Set(Object.values(IPC_CHANNELS));
+    expect(reviewed.size).toBeGreaterThan(50);
+    expect([...reviewed].sort()).toEqual([...requests].sort());
+  });
+
   it("are a set these tests can actually see", () => {
     // Guards the guard. A regex that stopped matching would otherwise report
     // perfect agreement between two empty sets, which is the one result this

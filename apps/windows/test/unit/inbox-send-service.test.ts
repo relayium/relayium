@@ -34,6 +34,8 @@ import {
 } from "../../src/main/features/inbox-send-service.js";
 import type { InboxSendView } from "../../src/main/features/inbox-send.js";
 import type { InboxAuthority } from "../../src/main/features/inbox.js";
+import { RecoveryStore } from "../../src/main/stored/upload/recovery-store.js";
+import { UploadKeyCustody } from "../../src/main/stored/upload/custody.js";
 
 const ORIGIN = "https://relayium.test";
 const SELF = "dev-self";
@@ -100,6 +102,9 @@ class FakeCentral {
   /** When set, the create response is DROPPED — the ambiguous case. */
   swallowCreate = false;
   createCalls = 0;
+  loseFinalize = false;
+  loseCreateAfterCommit = false;
+  loseCancelAfterCommit = false;
   /** Tasks central holds, by idempotency key, so a retry converges. */
   readonly tasks = new Map<string, Record<string, unknown>>();
   /** Held open so a test can inspect a job mid-upload. */
@@ -174,7 +179,23 @@ class FakeCentral {
     }
     const finalize = /^\/api\/uploads\/([A-Za-z0-9_-]+)\/finalize$/.exec(url.pathname);
     if (finalize !== null) {
+      if (this.loseFinalize) throw new TypeError("controlled finalize response loss");
       return json(200, { id: `obj-${finalize[1]!}`, expiresAt: 9_999 });
+    }
+    if (method === "GET" && /\/inbox\/tasks\/[^/]+$/.test(url.pathname)) {
+      const id = url.pathname.split("/").at(-1);
+      const task = [...this.tasks.values()].find((task) => task["ID"] === id);
+      return task ? json(200, { task }) : json(404, { error: "not-found" });
+    }
+    if (method === "DELETE" && /\/inbox\/tasks\/[^/]+$/.test(url.pathname)) {
+      const id = url.pathname.split("/").at(-1);
+      const task = [...this.tasks.values()].find((task) => task["ID"] === id);
+      if (!task) return json(404, { error: "not-found" });
+      if (task["State"] === "downloading" || task["State"] === "verifying") return json(409, { error: "invalid_transition", task });
+      if (task["State"] === "saved") return json(409, { error: "task_terminal", task });
+      this.tasks.delete(String(task["IdempotencyKey"]));
+      if (this.loseCancelAfterCommit) throw new TypeError("controlled committed cancellation response loss");
+      return json(200, { status: "ok" });
     }
     if (url.pathname.endsWith("/inbox/tasks") && method === "POST") {
       this.createCalls += 1;
@@ -192,7 +213,10 @@ class FakeCentral {
         throw Object.assign(new Error("connection reset"), { name: "TypeError" });
       }
       const existing = this.tasks.get(key);
-      if (existing !== undefined) return json(200, { task: existing });
+      if (existing !== undefined) {
+        if (this.loseCreateAfterCommit) throw new TypeError("controlled committed replay response loss");
+        return json(200, { task: existing });
+      }
       const task = {
         ID: `task-${String(this.tasks.size + 1)}`,
         SourceDeviceID: SELF,
@@ -210,6 +234,7 @@ class FakeCentral {
         Terminal: false,
       };
       this.tasks.set(key, task);
+      if (this.loseCreateAfterCommit) throw new TypeError("controlled committed create response loss");
       return json(201, { task });
     }
     return json(404, { error: "no route" });
@@ -232,6 +257,7 @@ interface Harness {
   document: number;
   /** Drive one delivery with the REAL producer, exactly as the renderer does. */
   produce(jobId: string, contentKey: string, files: readonly File[], expects: unknown): Promise<void>;
+  reopen(): InboxSendService;
 }
 
 async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
@@ -258,7 +284,7 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
   const failures: unknown[] = [];
   const releases = new Set<() => void>();
 
-  const service = new InboxSendService({
+  const deps: InboxSendDeps = {
     origin: ORIGIN,
     authority: async () => {
       if (state.hold !== null) {
@@ -280,7 +306,8 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
     fetchImpl: central.fetch,
     now: () => 1_000,
     ...over,
-  });
+  };
+  const service = new InboxSendService(deps);
   // A timed-out test can still have start() parked before it owns a job id.
   // Release only this fixture's controls, fence/stop the real service, then
   // join those admissions before deleting the real store beneath them.
@@ -304,6 +331,11 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
 
   return {
     service,
+    reopen: () => {
+      const fresh = new InboxSendService(deps);
+      cleanups.add(async () => { await fresh.dispose(); });
+      return fresh;
+    },
     central,
     runtime,
     progress,
@@ -381,6 +413,235 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
 function fileOf(name: string, bytes: number): File {
   return new File([new Uint8Array(bytes).fill(65)], name);
 }
+
+describe("protected outgoing conversation history", () => {
+  it("retains the key after a local purge failure, then cleans only temporary bytes while keeping exact protected text", async () => {
+    const remove = RecoveryStore.prototype.remove;
+    let blocked = true;
+    const purge = vi.spyOn(RecoveryStore.prototype, "remove").mockImplementation(async function (this: RecoveryStore, plan) {
+      if (blocked) throw new Error("controlled local purge failure");
+      return remove.call(this, plan);
+    });
+    const retire = vi.spyOn(UploadKeyCustody.prototype, "retire");
+    try {
+      const h = await harness(); const body = "Exact protected text · 中文\nsecond line";
+      const file = new File([body], "message.txt");
+      const start = await h.service.start({ target: TARGET, kind: "text", entries: [{ path: file.name, size: file.size }], document: 7 });
+      expect(start.ok).toBe(true); if (!start.ok) return;
+      await h.produce(start.jobId, start.contentKey, [file], start.expects);
+      expect((await h.service.end(start.jobId)).kind).toBe("delivered");
+      expect(await h.service.recoveryEntries()).toMatchObject([{ jobId: start.jobId, phase: "cleanup", canDiscard: true }]);
+      expect(retire).not.toHaveBeenCalled();
+      expect(await h.service.openSent(start.jobId)).toEqual({ text: body });
+      const requests = h.central.requests.length;
+      blocked = false;
+      expect(await h.service.recoveryEntries()).toEqual([]);
+      expect(purge).toHaveBeenCalled();
+      expect(retire).toHaveBeenCalledWith(start.jobId, "task-key-wrapped");
+      expect(await h.service.openSent(start.jobId)).toEqual({ text: body });
+      expect(h.central.requests).toHaveLength(requests);
+      await h.service.dispose();
+      expect(await h.reopen().openSent(start.jobId)).toEqual({ text: body });
+    } finally { blocked = false; purge.mockRestore(); retire.mockRestore(); }
+  });
+
+  it("never purges ciphertext or retires a raw key while task creation is unconfirmed", async () => {
+    const purge = vi.spyOn(RecoveryStore.prototype, "remove");
+    const retire = vi.spyOn(UploadKeyCustody.prototype, "retire");
+    try {
+      const h = await harness(); h.central.loseCreateAfterCommit = true;
+      const file = fileOf("retain.bin", 10);
+      const start = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: file.name, size: file.size }], document: 7 });
+      expect(start.ok).toBe(true); if (!start.ok) return;
+      await h.produce(start.jobId, start.contentKey, [file], start.expects);
+      expect((await h.service.end(start.jobId)).kind).toBe("unknown");
+      expect(await h.service.recoveryEntries()).toMatchObject([{ jobId: start.jobId, phase: "unconfirmed", canResume: true }]);
+      expect(purge).not.toHaveBeenCalled(); expect(retire).not.toHaveBeenCalled();
+    } finally { purge.mockRestore(); retire.mockRestore(); }
+  });
+
+  it.each(["queued", "downloading", "saved"] as const)("explicit cancellation respects the real %s task state and preserves local history", async (state) => {
+    const h = await harness(); const file = fileOf("history-stays.txt", 10);
+    const start = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: file.name, size: file.size }], document: 7 });
+    expect(start.ok).toBe(true); if (!start.ok) return;
+    await h.produce(start.jobId, start.contentKey, [file], start.expects); await h.service.end(start.jobId);
+    const task = [...h.central.tasks.values()][0]!; task["State"] = state; task["Terminal"] = state === "saved";
+    const view = await h.service.cancelDelivery(start.jobId, 7);
+    expect(view.kind).toBe(state === "queued" ? "cancelled" : state === "saved" ? "delivered" : "refused");
+    if (state === "downloading") expect(view).toMatchObject({ reason: "task_in_progress" });
+    expect(h.central.tasks.size).toBe(state === "queued" ? 0 : 1);
+    expect((await h.service.sentHistory())?.[0]?.items).toEqual([{ name: file.name, size: 10 }]);
+    expect(h.central.received.size).toBe(1); expect(h.central.createCalls).toBe(1);
+    const deletes = h.central.requests.filter((request) => request.method === "DELETE");
+    expect(deletes).toHaveLength(state === "saved" ? 0 : 1);
+  });
+
+  it("a lost cancellation reply recovers by reading the original task, without sending content again", async () => {
+    const h = await harness(); const file = fileOf("cancel.txt", 10);
+    const start = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: file.name, size: file.size }], document: 7 });
+    expect(start.ok).toBe(true); if (!start.ok) return;
+    await h.produce(start.jobId, start.contentKey, [file], start.expects); await h.service.end(start.jobId);
+    h.central.loseCancelAfterCommit = true;
+    expect((await h.service.cancelDelivery(start.jobId, 7)).kind).toBe("unknown");
+    const [entry] = (await h.service.recoveryEntries())!;
+    expect(entry).toMatchObject({ jobId: start.jobId, phase: "unconfirmed", canResume: true });
+    await h.service.dispose(); const fresh = h.reopen();
+    expect(await fresh.resumeRecovery(entry!.jobId, entry!.version, 7)).toMatchObject({ kind: "refused", reason: "no-task" });
+    expect((await fresh.sentHistory())?.[0]?.state).toBe("removed");
+    expect(h.central.tasks.size).toBe(0); expect(h.central.received.size).toBe(1); expect(h.central.createCalls).toBe(1);
+  });
+  it("a document replacement aborts and joins recovery before its cold credential read can finish", async () => {
+    const h = await harness(); h.central.loseFinalize = true;
+    const file = fileOf("resume.bin", 20);
+    const start = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: file.name, size: file.size }], document: 7 });
+    expect(start.ok).toBe(true); if (!start.ok) return;
+    await h.produce(start.jobId, start.contentKey, [file], start.expects); await h.service.end(start.jobId);
+    const entry = (await h.service.recoveryEntries())![0]!;
+    await h.service.dispose(); h.central.loseFinalize = false;
+    const fresh = h.reopen(); const gate = h.park(); const requests = h.central.requests.length;
+    const running = fresh.resumeRecovery(entry.jobId, entry.version);
+    await gate.arrived; h.document = 8;
+    let joined = false; const revoking = fresh.revokeDocument(7).then(() => { joined = true; });
+    await new Promise<void>((resolve) => setImmediate(resolve)); expect(joined).toBe(false);
+    gate.release(); await revoking;
+    expect((await running).kind).toBe("unknown"); expect(h.central.requests).toHaveLength(requests);
+  });
+
+  it("a document replacement aborts the native discard snapshot without removing the copy", async () => {
+    let answer!: (value: boolean) => void; let opened!: (signal: AbortSignal) => void;
+    const prompt = new Promise<boolean>((resolve) => { answer = resolve; });
+    const entered = new Promise<AbortSignal>((resolve) => { opened = resolve; });
+    const h = await harness({ confirmRecoveryDiscard: async (signal) => { opened(signal); return prompt; } });
+    const file = fileOf("incomplete.bin", 10);
+    const start = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: file.name, size: file.size }], document: 7 });
+    expect(start.ok).toBe(true); if (!start.ok) return;
+    await h.produce(start.jobId, start.contentKey, [file], start.expects); await h.service.cancel(start.jobId);
+    const entry = (await h.service.recoveryEntries())![0]!;
+    const discarding = h.service.discardRecovery(entry.jobId, entry.version); const signal = await entered;
+    h.document = 8; const revoking = h.service.revokeDocument(7); expect(signal.aborted).toBe(true);
+    answer(true); await revoking;
+    expect(await discarding).not.toBe("discarded"); expect(await h.service.recoveryEntries()).toEqual([entry]);
+  });
+
+  it("rotating the credential epoch retires a held upload even when account and device IDs stay the same", async () => {
+    let central!: FakeCentral; const signals: AbortSignal[] = [];
+    const h = await harness({ fetchImpl: async (url, init) => { if (init?.method === "PATCH" && init.signal) signals.push(init.signal); return central.fetch(url, init); } });
+    central = h.central;
+    let release!: () => void; central.holdAppend = new Promise<void>((resolve) => { release = resolve; });
+    const file = fileOf("epoch.bin", 80_000);
+    const start = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: file.name, size: file.size }], document: 7 });
+    expect(start.ok).toBe(true); if (!start.ok) { release(); return; }
+    await h.produce(start.jobId, start.contentKey, [file], start.expects);
+    const ending = h.service.end(start.jobId);
+    await vi.waitFor(() => expect(signals).toHaveLength(1));
+    h.setEpoch(2); h.setAuthority({ kind: "ok", bearer: "rotated-bearer", epoch: 2 });
+    const context = captureAccount({ accountID: SELF, deviceID: SELF, epoch: 2, inboxRoot: `${roots[0]!}/inbox` });
+    h.setIdentity({ context, deviceID: SELF, epoch: 2 });
+    const changing = h.service.onAccountChanged();
+    try { expect(signals[0]!.aborted).toBe(true); }
+    finally { release(); central.holdAppend = null; await ending; await changing; }
+    expect(central.createCalls).toBe(0);
+  });
+  it("requires current native consent to discard an incomplete copy and performs no extra network action", async () => {
+    let confirmed = false;
+    const confirm = vi.fn(async () => confirmed);
+    const h = await harness({ confirmRecoveryDiscard: confirm });
+    const start = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: "not-finished.bin", size: 10 }], document: 7 });
+    expect(start.ok).toBe(true); if (!start.ok) return;
+    await h.produce(start.jobId, start.contentKey, [fileOf("not-finished.bin", 10)], start.expects);
+    await h.service.cancel(start.jobId);
+    const [entry] = (await h.service.recoveryEntries())!;
+    expect(entry).toMatchObject({ canResume: false, canDiscard: true, phase: "preparing" });
+    const requests = h.central.requests.length;
+    expect(await h.service.discardRecovery(entry!.jobId, "stale")).toBe("refused");
+    expect(confirm).not.toHaveBeenCalled();
+    expect(await h.service.discardRecovery(entry!.jobId, entry!.version)).toBe("declined");
+    expect(await h.service.recoveryEntries()).toEqual([entry]);
+    confirmed = true;
+    expect(await h.service.discardRecovery(entry!.jobId, entry!.version)).toBe("discarded");
+    expect(await h.service.recoveryEntries()).toEqual([]);
+    expect(h.central.requests).toHaveLength(requests);
+  });
+
+  it("an unknown committed create survives local-copy discard and still converges to its original task", async () => {
+    const h = await harness({ confirmRecoveryDiscard: async (_signal, uncertain) => uncertain });
+    h.central.loseCreateAfterCommit = true;
+    const file = fileOf("queued.txt", 10);
+    const start = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: file.name, size: file.size }], document: 7 });
+    expect(start.ok).toBe(true); if (!start.ok) return;
+    await h.produce(start.jobId, start.contentKey, [file], start.expects); expect((await h.service.end(start.jobId)).kind).toBe("unknown");
+    const entry = (await h.service.recoveryEntries())![0]!; const count = h.central.requests.length;
+    expect(await h.service.discardRecovery(entry.jobId, entry.version)).toBe("discarded");
+    expect(h.central.requests).toHaveLength(count);
+    const [retained] = (await h.service.recoveryEntries())!;
+    expect(retained).toMatchObject({ canResume: true, canDiscard: false, phase: "unconfirmed" });
+    h.central.loseCreateAfterCommit = false;
+    expect(await h.service.resumeRecovery(retained!.jobId, retained!.version)).toMatchObject({ kind: "delivered" });
+    expect(h.central.tasks.size).toBe(1); expect(h.central.received.size).toBe(1);
+  });
+  it("refreshes only authenticated original task states without sending again or moving timeline order", async () => {
+    const h = await harness(); const file = fileOf("one.txt", 10);
+    const start = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: file.name, size: file.size }], document: 7 });
+    expect(start.ok).toBe(true); if (!start.ok) return;
+    await h.produce(start.jobId, start.contentKey, [file], start.expects); await h.service.end(start.jobId);
+    const before = await h.service.sentHistory(); const uploads = h.central.received.size; const creates = h.central.createCalls;
+    const task = [...h.central.tasks.values()][0]!; task["State"] = "saved"; task["Terminal"] = true;
+    await Promise.all([h.service.refreshTracked(), h.service.refreshTracked()]);
+    expect((await h.service.sentHistory())?.[0]).toMatchObject({ state: "saved", createdAt: before![0]!.createdAt });
+    expect(h.central.received.size).toBe(uploads); expect(h.central.createCalls).toBe(creates);
+    expect(h.central.requests.filter((request) => request.method === "GET" && /\/inbox\/tasks\//.test(request.url))).toHaveLength(1);
+  });
+  it.each(["finalize", "create"] as const)("reopens the original prepared delivery after lost %s without a new upload or task", async (fault) => {
+    const h = await harness(); const file = new File(["exact protected message\n🧪"], "message");
+    h.central.loseFinalize = fault === "finalize"; h.central.loseCreateAfterCommit = fault === "create";
+    const start = await h.service.start({ target: TARGET, kind: "text", entries: [{ path: file.name, size: file.size }], document: 7 });
+    expect(start.ok).toBe(true); if (!start.ok) return;
+    await h.produce(start.jobId, start.contentKey, [file], start.expects);
+    expect(h.central.requests.filter((entry) => entry.url.includes("/api/uploads"))).toEqual([]);
+    expect((await h.service.end(start.jobId)).kind).toBe("unknown");
+    await h.service.dispose();
+    h.central.loseFinalize = false; h.central.loseCreateAfterCommit = false;
+    const reopened = h.reopen(); const before = h.central.requests.length;
+    const entries = await reopened.recoveryEntries();
+    expect(entries).toHaveLength(1); expect(entries?.[0]).toMatchObject({ jobId: start.jobId, peerID: TARGET, canResume: true });
+    expect(h.central.requests).toHaveLength(before);
+    expect(await reopened.resumeRecovery(start.jobId, "stale")).toMatchObject({ kind: "unknown", reason: "stale-recovery" });
+    expect(h.central.requests).toHaveLength(before);
+    expect(await reopened.resumeRecovery(start.jobId, entries![0]!.version)).toMatchObject({ kind: "delivered" });
+    expect(h.central.received.size).toBe(1); expect(h.central.tasks.size).toBe(1);
+    expect(h.central.requests.filter((entry) => entry.method === "POST" && entry.url.startsWith("/api/uploads?"))).toHaveLength(1);
+    expect(await reopened.openSent(start.jobId)).toEqual({ text: "exact protected message\n🧪" });
+    expect(await reopened.recoveryEntries()).toEqual([]);
+  });
+  it("records the exact accepted ciphertext's text, opens/copies locally, and never recalls on deletion", async () => {
+    const copies: string[] = [];
+    const h = await harness({ writeClipboard: (text) => copies.push(text) });
+    const text = "  原样\n🧪\n "; const file = new File([text], "message");
+    const start = await h.service.start({ target: TARGET, kind: "text", entries: [{ path: "message", size: file.size }], document: 7 });
+    expect(start.ok).toBe(true); if (!start.ok) return;
+    await h.produce(start.jobId, start.contentKey, [file], start.expects);
+    await h.service.end(start.jobId);
+    const history = await h.service.sentHistory();
+    expect(history).toHaveLength(1); expect(history?.[0]).toMatchObject({ id: start.jobId, peerID: TARGET, body: null, kind: "text" });
+    expect(await h.service.openSent(start.jobId)).toEqual({ text });
+    expect(await h.service.copySent(start.jobId, 6)).toBe(false);
+    expect(await h.service.copySent(start.jobId, 7)).toBe(true); expect(copies).toEqual([text]);
+    const requests = h.central.requests.length;
+    expect(await h.service.forgetSent([start.jobId])).toBe(true);
+    expect(await h.service.sentHistory()).toEqual([]); expect(await h.service.openSent(start.jobId)).toBeNull();
+    expect(h.central.requests.length).toBe(requests);
+  });
+
+  it("keeps an in-flight deletion deleted when the delivery subsequently settles", async () => {
+    const h = await harness(); const file = fileOf("report.pdf", 9);
+    const start = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: file.name, size: file.size }], document: 7 });
+    expect(start.ok).toBe(true); if (!start.ok) return;
+    await h.service.forgetSent([start.jobId]);
+    await h.produce(start.jobId, start.contentKey, [file], start.expects);
+    expect((await h.service.end(start.jobId)).kind).toBe("delivered");
+    expect(await h.service.sentHistory()).toEqual([]);
+  });
+});
 
 describe("fixture lifetime", () => {
   it("joins a live un-fed delivery before deleting its directory", async () => {
@@ -604,9 +865,13 @@ describe("target-read shutdown", () => {
     } });
     const listing = h.service.targets();
     await gate.entered;
-    await h.service.onAccountChanged();
+    let stopped = false;
+    const changing = h.service.onAccountChanged().then(() => { stopped = true; });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(stopped).toBe(false);
     gate.release();
     expect(await listing).toEqual({ ok: false, refusal: "unavailable" });
+    await changing;
     expect(calls).toBe(1);
     expect(h.central.requests).toEqual([]);
   });

@@ -898,8 +898,18 @@ final class MacSurfaceGuardTests: XCTestCase {
         let list = try XCTUnwrap(pane.components(separatedBy: "struct LinkTransferListView")
             .dropFirst().first)
 
+        let live = try XCTUnwrap(pane.components(separatedBy: "private var liveSurface: some View").dropFirst().first)
+        let active = try XCTUnwrap(live.range(of: "transfers\n"))
+        let composer = try XCTUnwrap(live.range(of: "composer\n"))
+        XCTAssertLessThan(active.lowerBound, composer.lowerBound,
+                          "file offers and progress must come before the conversation controls")
+        XCTAssertTrue(list.contains("let active = offered + moving"))
+
         // Every batch, terminal ones included, renders through the model.
-        XCTAssertTrue(list.contains("ForEach(model.batchesNewestFirst)"))
+        XCTAssertTrue(list.contains("let batches = model.batchesNewestFirst"))
+        XCTAssertTrue(list.contains("batches.filter { !featuredIDs.contains($0.id) }"),
+                      "the history list must retain every batch outside the featured rows")
+        XCTAssertTrue(list.contains("ForEach(rows)"))
         // Its identity: how many files and how large. `summary` is applied to
         // the batch itself rather than to a live-only projection, so a failed
         // batch keeps it.
@@ -2074,17 +2084,16 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the announced name is no longer the identity row's value")
         XCTAssertTrue(pane.contains("L10n.t(.nearbyAnnouncedNameCaption)"),
                       "the announced name is shown with nothing saying what it is")
-        XCTAssertTrue(pane.contains("SectionCard(title: L10n.t(.nearbyThisMacHeading),"),
-                      "identity is filed back inside the receive status")
-        // It is the FIRST thing under the route rail, above the card that holds
-        // the roster: a first-viewport answer or it is not an answer.
+        XCTAssertTrue(pane.contains("Button { showsThisMacDetails.toggle() }"))
+        XCTAssertTrue(pane.contains("if showsThisMacDetails {"))
+        XCTAssertTrue(pane.contains(".accessibilityIdentifier(\"lan-this-mac-details\")"))
         guard let head = pane.range(of: "receiving\n"),
-              let identity = pane.range(of: "thisMac", range: head.upperBound..<pane.endIndex),
-              let roster = pane.range(of: "sameNetwork", range: identity.upperBound..<pane.endIndex)
+              let roster = pane.range(of: "sameNetwork\n", range: head.upperBound..<pane.endIndex),
+              let identity = pane.range(of: "thisMac\n", range: roster.upperBound..<pane.endIndex)
         else {
-            return XCTFail("the LAN pane no longer has the shape this guards")
+            return XCTFail("the LAN pane must show nearby devices before local details")
         }
-        XCTAssertLessThan(identity.upperBound, roster.lowerBound)
+        XCTAssertLessThan(roster.lowerBound, identity.lowerBound)
         // The two states a card with no name has to distinguish, because their
         // remedies are opposite: waiting, and not started.
         for state in ["nearbyIdentityAnnouncing", "nearbyIdentityNotListening"] {
@@ -6061,7 +6070,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     func testTheEmptyRosterMakesTheAddressARealLinkFromOneSource() throws {
         let pane = try source(named: lanConnect)
         XCTAssertTrue(pane.contains("title: L10n.t(.nearbyEmptyRosterTitle)")
-                      && pane.contains("body: L10n.t(.nearbyEmptyRosterOpen)"),
+                      && pane.contains("body: L10n.t(.macNearbyEmptyRosterOpen)"),
                       "the empty roster stopped rendering the split copy the link belongs to")
         XCTAssertFalse(pane.contains("L10n.t(.nearbyEmptyRoster)"),
                        "the Mac renders the sentence that names the address in prose, "
@@ -6384,7 +6393,7 @@ final class MacSurfaceGuardTests: XCTestCase {
 
         XCTAssertTrue(link.contains("ForEach(model.textMessagesNewestFirst)"),
                       "the unified transcript renders oldest first again")
-        XCTAssertTrue(link.contains("ForEach(model.batchesNewestFirst)"),
+        XCTAssertTrue(link.contains("let batches = model.batchesNewestFirst"),
                       "the unified transfer list renders oldest first again")
         XCTAssertFalse(link.contains("ForEach(model.textMessages)")
                        || link.contains("ForEach(model.batches)"),
@@ -6482,7 +6491,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       && parent.contains("LinkTranscriptView(model: text)"),
                       "the transcript is no longer mounted whenever the conversation exists")
         XCTAssertTrue(parent.contains("if let files = link.fileModel {")
-                      && parent.contains("LinkTransferListView(model: files, link: link)"),
+                      && parent.contains("LinkTransferListView(model: files, link: link, history: history)"),
                       "the transfer list is no longer mounted whenever the file model exists")
 
         // …and reads a list it does not observe in exactly one place, which is
@@ -6496,9 +6505,9 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the pane reads a batch list it does not observe")
 
         // The one surviving suppression lives with its observer, and only there.
-        XCTAssertTrue(list.contains("if !model.batches.isEmpty || !link.armedFiles.isEmpty"),
+        XCTAssertTrue(list.contains("if !rows.isEmpty || showsArmed"),
                       "the transfer list lost the empty suppression that belongs to it")
-        XCTAssertEqual(occurrences(of: "if !model.batches.isEmpty || !link.armedFiles.isEmpty",
+        XCTAssertEqual(occurrences(of: "if !rows.isEmpty || showsArmed",
                                    in: link), 1,
                        "the batch suppression is decided in more than one place")
     }

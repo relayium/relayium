@@ -1,5 +1,6 @@
 #if DEBUG
 import Foundation
+import Combine
 import RelayiumAppKit
 import RelayiumKit
 
@@ -24,8 +25,8 @@ import RelayiumKit
 /// so "3 files saved" on screen means three files genuinely landed on disk.
 ///
 /// It is the iOS counterpart of the macOS `UITestInbox`, reduced to the two
-/// launches the iOS surface needs: `check` (automatic schedule stretched to an
-/// hour, so every pass after launch is one the test asked for) and `ask` (two
+/// launches the iOS surface needs: `check` (only explicit checks advance the
+/// delivery script, while foreground probes remain active) and `ask` (two
 /// deliveries held for an answer, so Check now can be shown to answer nothing on
 /// the user's behalf).
 ///
@@ -95,8 +96,11 @@ enum UITestInbox {
         // in a state the app itself is unable to reach.
         try? folder.setReceivePolicy(mode == .ask ? .ask : .auto, account: account)
 
-        let transport = UITestInboxTransport(mode: mode)
-        return InboxController(runtime: InboxRuntime(
+        let box = UITestInboxControllerBox()
+        let transport = UITestInboxTransport(mode: mode, isManualCheck: {
+            await MainActor.run { box.controller?.manualCheck == .checking }
+        })
+        let controller = InboxController(runtime: InboxRuntime(
             folder: folder,
             makeEngine: { account, _ in
                 InboxReceiveEngine(transport: transport, keys: keys, journals: journals,
@@ -105,10 +109,8 @@ enum UITestInbox {
             notifier: nil,
             messageStore: { _ in messages },
             conversationStore: { _ in conversations },
-            // The production sleeper with a stretched schedule: a real wait keeps
-            // the main actor free for the UI under test, and an hour between
-            // automatic passes means nothing below can be explained by the loop's
-            // own timer rather than by the press being tested.
+            // The production sleeper keeps the main actor free. Maintenance is
+            // stretched, while real fast probes still cannot advance the script.
             sleeper: InboxTaskSleeper(),
             platform: AppEnvironment.iosInboxPlatform,
             // The app scene's own claim, passed in: this fixture presents the
@@ -117,6 +119,11 @@ enum UITestInbox {
             appVersion: "uitest",  // nonlocalized: a build label, never displayed
             backoff: InboxBackoff(idle: 3600, afterWork: 3600, first: 1, cap: 2,
                                   blocked: 3600)))
+        box.controller = controller
+        box.checkObservation = controller.$manualCheck.removeDuplicates().sink { [weak transport] state in
+            if state == .checking { transport?.beginManualCheck() }
+        }
+        return controller
     }
 
     /// A directory of this launch's own under Application Support — never
@@ -139,6 +146,13 @@ enum UITestInbox {
     }
 }
 
+/// The runtime owns the box; it keeps the controller weak and the observation alive.
+@MainActor
+private final class UITestInboxControllerBox {
+    weak var controller: InboxController?
+    var checkObservation: AnyCancellable?
+}
+
 /// Central, answered in process.
 ///
 /// Registers whatever key the launch generated, so the delivery below is sealed
@@ -149,12 +163,17 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
     private var publicKey = ""
     private var ciphertext = Data()
     private var delivered = false
-    /// How many pending reads have been answered. The first is the automatic
-    /// pass at launch; every later one is a check the test pressed for.
-    private var pendingReads = 0
+    /// Distinct explicit checks; foreground pending probes cannot advance the script.
+    private let isManualCheck: @Sendable () async -> Bool
+    private var manualChecks = 0
     private var askAnswers: [String: Bool] = [:]
 
-    init(mode: UITestInbox.Mode) { self.mode = mode }
+    init(mode: UITestInbox.Mode, isManualCheck: @escaping @Sendable () async -> Bool) {
+        self.mode = mode
+        self.isManualCheck = isManualCheck
+    }
+
+    func beginManualCheck() { sync { manualChecks += 1 } }
 
     // nonlocalized: acceptance fixture identifiers, never displayed
     private static let deviceID = "dev_this"
@@ -182,10 +201,10 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
     }
 
     /// Central holds the check delivery only from the SECOND check on — the
-    /// launch pass is read one, the first check read two — so the first check is
-    /// genuinely empty rather than racing the delivery.
+    /// first explicit check is genuinely empty. Automatic reads never advance
+    /// this script, regardless of the foreground polling cadence.
     private var offersDelivery: Bool {
-        mode == .check && sync { pendingReads } >= 3
+        mode == .check && sync { manualChecks } >= 2
     }
 
     func currentDevice() async throws -> InboxDeviceRow {
@@ -226,13 +245,12 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
     func goOffline() async throws {}
 
     func pending(limit: Int) async throws -> [InboxTask] {
-        let read = sync { () -> Int in pendingReads += 1; return pendingReads }
-        // Every pass after the launch pass is one the user asked for, held long
-        // enough that Checking… — and the disabled control — can be observed.
+        // Only explicit checks advance the script. Automatic foreground probes
+        // remain active and cannot consume the first empty manual answer.
         // Four seconds rather than the Mac fixture's 1.5: every XCUITest query
         // on the iOS simulator costs about a second, and a measured run saw the
         // shorter pass finish between the disabled read and the label read.
-        if read > 1 { try await Task.sleep(nanoseconds: 4_000_000_000) }
+        if await isManualCheck() { try await Task.sleep(nanoseconds: 4_000_000_000) }
         if mode == .ask {
             let answered = sync { askAnswers }
             return Self.askTasks.filter { answered[$0.id] == nil }

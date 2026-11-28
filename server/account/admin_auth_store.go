@@ -109,6 +109,7 @@ var (
 // boot) and OpenAdminAuthStore (the local command), so whichever runs first
 // leaves the same shape behind. Every statement is idempotent.
 var adminAuthSchemaCreate = []string{
+	`CREATE TABLE IF NOT EXISTS admin_ip_access (ip TEXT PRIMARY KEY, attempts INTEGER NOT NULL CHECK(attempts BETWEEN 1 AND 4))`,
 	`CREATE TABLE IF NOT EXISTS admin_enrollments (
   id TEXT PRIMARY KEY,
   grant_hash TEXT NOT NULL UNIQUE,
@@ -166,6 +167,11 @@ var adminAuthSchemaAlter = []string{
 }
 
 func ensureAdminAuthSchema(ctx context.Context, db *sql.DB) error {
+	for _, q := range adminBrowserSchema {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("admin browser schema: %w", err)
+		}
+	}
 	for _, q := range adminAuthSchemaCreate {
 		if _, err := db.ExecContext(ctx, q); err != nil {
 			return fmt.Errorf("admin auth schema: %w", err)
@@ -503,7 +509,7 @@ func (s *SQLiteStore) AdminAuth() *AdminAuthStore { return &AdminAuthStore{db: s
 
 // AdminAuthStore is the privileged, local-only admin credential manager. It is
 // never reachable over HTTP. OpenAdminAuthStore opens an EXISTING server
-// database touching only admin_* tables: no customer table is read or written,
+// database initializing only admin_* tables: no customer table is read or written,
 // no server boot job runs, no network or mail is initialised.
 type AdminAuthStore struct {
 	db    *sql.DB

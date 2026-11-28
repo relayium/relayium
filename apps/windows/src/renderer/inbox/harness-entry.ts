@@ -39,7 +39,10 @@ import type {
   InboxPendingView,
   InboxReceiptView,
   InboxView,
+  InboxSentHistoryView,
+  InboxNamedDeliveryView,
 } from "../../shared/ipc-contract.js";
+import type { InboxSendTargetView } from "../../main/features/inbox-send.js";
 import "../tokens.css";
 
 /** A signed-in, receiving Inbox with nothing wrong. Scenarios modify a copy. */
@@ -55,7 +58,7 @@ const BASE: InboxView = {
   retained: [],
 };
 
-const calls = { release: [] as string[], wake: 0 };
+const calls = { release: [] as string[], wake: 0, forgotten: [] as string[], deletedMessages: [] as string[], copied: [] as string[] };
 const listeners = new Set<(payload: unknown) => void>();
 
 const answers = {
@@ -63,6 +66,11 @@ const answers = {
   receipts: null as readonly InboxReceiptView[] | null,
   /** `release` reports success unless a scenario says otherwise. */
   releaseOk: true,
+  targets: [] as readonly InboxSendTargetView[],
+  sent: [] as readonly InboxSentHistoryView[],
+  messages: [] as readonly InboxMessageView[],
+  named: [] as readonly InboxNamedDeliveryView[],
+  text: {} as Record<string, string>,
 };
 
 const ok = { kind: "ok" } as const;
@@ -75,10 +83,10 @@ const bridge: InboxBridge = {
   pending: () => Promise.resolve([] as readonly InboxPendingView[]),
   accept: () => Promise.resolve({ kind: "queued" } as const),
   reject: () => Promise.resolve(ok),
-  messages: () => Promise.resolve([] as readonly InboxMessageView[]),
-  open: () => Promise.resolve({ text: "" }),
-  copy: () => Promise.resolve(ok),
-  remove: () => Promise.resolve(ok),
+  messages: () => Promise.resolve(answers.messages),
+  open: ({ id }) => Promise.resolve({ text: answers.text[id] ?? "" }),
+  copy: ({ id }) => { calls.copied.push(id); return Promise.resolve(ok); },
+  remove: ({ id }) => { calls.deletedMessages.push(id); answers.messages = answers.messages.filter((item) => item.id !== id); return Promise.resolve(ok); },
   rename: () => Promise.resolve({ kind: "renamed", name: "This PC" } as const),
   wake: () => {
     calls.wake += 1;
@@ -98,8 +106,8 @@ const bridge: InboxBridge = {
   setPolicy: () => Promise.resolve({ kind: "enabled" } as const),
   reveal: () => Promise.resolve(ok),
   receipts: () => Promise.resolve({ entries: answers.receipts }),
-  history: () => Promise.resolve({ entries: null }),
-  forget: () => Promise.resolve(ok),
+  history: () => Promise.resolve({ entries: answers.named }),
+  forget: ({ id }) => { calls.forgotten.push(id); answers.named = answers.named.filter((item) => item.taskID !== id); return Promise.resolve(ok); },
   onState(cb) {
     listeners.add(cb);
     return () => listeners.delete(cb);
@@ -108,7 +116,11 @@ const bridge: InboxBridge = {
 
 /** The send half is not what this harness drives; it is here to mount. */
 const sendBridge: InboxSendBridge = {
-  targets: () => Promise.resolve({ ok: true, targets: [] } as const),
+  targets: () => Promise.resolve({ ok: true, targets: answers.targets } as const),
+  history: () => Promise.resolve({ entries: answers.sent.map((entry) => ({ ...entry, body: null })) }),
+  open: ({ jobId }) => Promise.resolve({ text: answers.sent.find((entry) => entry.id === jobId)?.body ?? "" }),
+  copy: ({ jobId }) => { calls.copied.push(jobId); return Promise.resolve({ ok: true }); },
+  forget: ({ ids }) => { calls.forgotten.push(...ids); answers.sent = answers.sent.filter((entry) => !ids.includes(entry.id)); return Promise.resolve({ ok: true }); },
   start: () => Promise.reject(new Error("the send half is not driven by this harness")),
   feed: () => Promise.reject(new Error("the send half is not driven by this harness")),
   end: () => Promise.reject(new Error("the send half is not driven by this harness")),
@@ -152,6 +164,10 @@ Object.defineProperty(globalThis, "__inboxHarness", {
     },
     setReceipts(entries: readonly InboxReceiptView[] | null): void {
       answers.receipts = entries;
+    },
+    async setConversation(input: { targets: readonly InboxSendTargetView[]; sent: readonly InboxSentHistoryView[]; messages: readonly InboxMessageView[]; named: readonly InboxNamedDeliveryView[]; text: Record<string, string> }): Promise<void> {
+      Object.assign(answers, input);
+      await Promise.all([send.refreshTargets(), send.refreshHistory(), inbox.refreshLists()]);
     },
     setReleaseOk(okay: boolean): void {
       answers.releaseOk = okay;

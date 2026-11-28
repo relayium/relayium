@@ -1,3 +1,4 @@
+import { PasswordAuthClient } from "./account/password-auth.js";
 // Electron wiring. All policy lives in `app-service.ts`; this file narrows
 // untrusted payloads and hands them on.
 //
@@ -300,6 +301,8 @@ export interface ResidentEvents {
   onNearby?: (active: boolean) => void;
   /** Enabling start-at-login needs the user's explicit yes, asked natively. */
   confirmLoginItem?: () => Promise<boolean>;
+  confirmRecoveryDiscard?: (signal: AbortSignal, mayHaveFinished: boolean) => Promise<boolean>;
+  confirmInboxRecoveryDiscard?: (signal: AbortSignal, mayHaveFinished: boolean) => Promise<boolean>;
   /**
    * Interrupting the running app to install an update needs the same yes.
    *
@@ -469,6 +472,7 @@ export function registerHandlers(
         if (!root.ok) throw new IpcRefusal(`data root unavailable: ${root.reason}`);
         return new SecretStore(`${root.path}/secrets`, await platformCipher());
       }),
+    makePasswordAuthClient: () => new PasswordAuthClient(origin, new BoundedTransport(origin)),
     makeAuthClient:
       composition.makeAuthClient ??
       ((installationID) => new DeviceAuthClient(origin, new BoundedTransport(origin), installationID)),
@@ -537,6 +541,11 @@ export function registerHandlers(
 
   router.handle(IPC.authState, () => service.authState());
   router.handle(IPC.authStart, (payload) => service.startSignIn(attemptNonce(payload)));
+  router.handle(IPC.authPassword, (payload) => {
+    const body = expectObject(payload);
+    return service.passwordSignIn(attemptNonce(payload),
+      expectString(body["email"], 320), expectString(body["password"], 2048));
+  });
   router.handle(IPC.authPoll, (payload) => service.pollSignIn(attemptNonce(payload)));
   router.handle(IPC.authCancel, (payload) => service.cancelSignIn(attemptNonce(payload)));
   router.handle(IPC.authSignOut, () => service.signOut());
@@ -1187,6 +1196,8 @@ export function registerHandlers(
     runtime: () => inboxComposition.runtime(),
     // The document that ASKED owns the job. One document, one job.
     currentDocument: () => router.generation,
+    writeClipboard: (text) => clipboard.writeText(text),
+    confirmRecoveryDiscard: async (signal, mayHaveFinished) => (await events.confirmInboxRecoveryDiscard?.(signal, mayHaveFinished)) === true,
     onProgress: (job, committed, total) => {
       // Emitted on the document that asked, never whichever is current: a
       // reload replaces the page rather than inheriting the delivery it began.
@@ -1205,6 +1216,25 @@ export function registerHandlers(
   const inboxSendJob = (payload: unknown): string => expectString(expectObject(payload)["jobId"], 64);
 
   router.handle(IPC.inboxSendTargets, () => inboxSend.targets());
+  router.handle(IPC.inboxSentHistory, async () => inboxSend.historySnapshot());
+  router.handle(IPC.inboxSendRecovery, async () => ({ entries: await inboxSend.recoveryEntries() }));
+  router.handle(IPC.inboxSendRefreshTracked, async () => ({ ok: await inboxSend.refreshTracked() }));
+  router.handle(IPC.inboxSendResume, (payload) => {
+    const body = expectObject(payload);
+    return inboxSend.resumeRecovery(inboxSendJob(body), expectString(body["version"], 64));
+  });
+  router.handle(IPC.inboxSendDiscardRecovery, async (payload) => {
+    const body = expectObject(payload);
+    return { result: await inboxSend.discardRecovery(inboxSendJob(body), expectString(body["version"], 64)) };
+  });
+  router.handle(IPC.inboxCancelDelivery, (payload) => inboxSend.cancelDelivery(inboxSendJob(payload), router.generation));
+  router.handle(IPC.inboxSentOpen, (payload) => inboxSend.openSent(inboxSendJob(payload)));
+  router.handle(IPC.inboxSentCopy, async (payload) => ({ ok: await inboxSend.copySent(inboxSendJob(payload), router.generation) }));
+  router.handle(IPC.inboxSentForget, async (payload) => {
+    const ids = expectObject(payload)["ids"];
+    if (!Array.isArray(ids) || ids.length > 500) throw new IpcRefusal("invalid history snapshot");
+    return { ok: await inboxSend.forgetSent(ids.map((id) => expectString(id, 64))) };
+  });
   router.handle(IPC.inboxSendStart, async (payload) => {
     const body = expectObject(payload);
     const kind = body["kind"];
@@ -1765,6 +1795,11 @@ export function registerHandlers(
   // page can say the names are unavailable rather than claiming nothing has
   // ever arrived. The counts in `inboxReceipts` are unaffected by it.
   router.handle(IPC.inboxHistory, async () => ({ entries: await inbox.history() }));
+  router.handle(IPC.inboxMarkRead, (payload) => {
+    const ids = expectObject(payload)["ids"];
+    if (!Array.isArray(ids) || ids.length > 1024) throw new IpcRefusal("invalid read snapshot");
+    return inbox.markRead(ids.map((id) => expectString(id, MAX_INBOX_ID_LENGTH)));
+  });
   router.handle(IPC.inboxForgetDelivery, (payload) => inbox.forgetDelivery(inboxId(payload)));
 
   router.handle(IPC.inboxReleaseRetained, (payload) => {
@@ -1848,16 +1883,18 @@ export function registerHandlers(
       return {
         secrets: await service.secretStore(),
         journalDirectory,
+        enableRecovery: true,
         ...(composition.storedSend ?? {}),
       };
     },
-    onProgress: (job, committed, total) => {
+    onProgress: (job, committed, total, phase) => {
       // The document that ASKED, never whichever one is current: a reload
       // replaces the page rather than inheriting the upload it started.
       router.emit(IPC_EVENTS.storedSendProgress, job.document, {
         jobId: job.id,
         committed,
         total,
+        ...(phase ? { phase } : {}),
       });
     },
     onOutcome: (job, outcome) => {
@@ -1868,6 +1905,7 @@ export function registerHandlers(
     // channel that takes a string and puts it there.
     writeClipboard: (text) => clipboard.writeText(text),
     currentDocument: () => router.generation,
+    confirmRecoveryDiscard: async (signal, mayHaveFinished) => (await events.confirmRecoveryDiscard?.(signal, mayHaveFinished)) === true,
   });
 
   // The Inbox resolves the SAME identity, through the same cache.
@@ -1956,6 +1994,17 @@ export function registerHandlers(
   // `null` is "could not be read", not "empty". Carried across as such so the
   // page can say so rather than claiming the user has never sent anything.
   router.handle(IPC.storedSendHistory, async () => ({ entries: await storedSend.history() }));
+  router.handle(IPC.storedSendRecovery, async () => ({ entries: await storedSend.recovery() }));
+  router.handle(IPC.storedSendResume, async (payload) => {
+    const body = expectObject(payload);
+    const outcome = await storedSend.resumeRecovery(expectString(body["jobId"], 64), expectIndex(body["revision"]), router.generation);
+    if (outcome.status === "published") events.onLinkReady?.();
+    return outcome;
+  });
+  router.handle(IPC.storedSendDiscardRecovery, async (payload) => {
+    const body = expectObject(payload);
+    return { result: await storedSend.discardRecovery(expectString(body["jobId"], 64), expectIndex(body["revision"])) };
+  });
   router.handle(IPC.storedSendLink, async (payload) => ({ link: await storedSend.link(sendJob(payload)) }));
   router.handle(IPC.storedSendDelete, async (payload) => ({
     result: await storedSend.remove(sendJob(payload)),

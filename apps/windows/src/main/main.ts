@@ -284,6 +284,17 @@ async function confirmUpdateInstall(): Promise<boolean> {
   return answer.response === 0;
 }
 
+async function confirmRecoveryDiscard(signal: AbortSignal, mayHaveFinished: boolean, inbox = false): Promise<boolean> {
+  if (signal.aborted) return false;
+  const t = translator(resident ? resident.currentLocale : "en");
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  const options: Electron.MessageBoxOptions = { type: "warning", title: t("recovery.discard.title"),
+    message: t("recovery.discard.title"), detail: t(inbox ? mayHaveFinished ? "recovery.discard.inboxUnknownBody" : "recovery.discard.inboxBody" : mayHaveFinished ? "recovery.discard.unknownBody" : "recovery.discard.body"),
+    buttons: [t("recovery.discard.confirm"), t("resident.login.cancel")], defaultId: 1, cancelId: 1, noLink: true, signal };
+  const result = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options);
+  return !signal.aborted && result.response === 0;
+}
+
 async function confirmLoginItem(): Promise<boolean> {
   const t = translator(resident ? resident.currentLocale : "en");
   const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
@@ -600,6 +611,9 @@ export interface BootstrapOptions {
    * Not reachable from a renderer, a flag or the environment.
    */
   readonly confirmUpdateInstall?: () => Promise<boolean>;
+  /** Native recovery-consent test seam, unavailable to renderer/env flags. */
+  readonly confirmRecoveryDiscard?: (signal: AbortSignal, mayHaveFinished: boolean) => Promise<boolean>;
+  readonly confirmInboxRecoveryDiscard?: (signal: AbortSignal, mayHaveFinished: boolean) => Promise<boolean>;
   /**
    * Answer the native startup consent, in process.
    *
@@ -745,6 +759,8 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
       onNearby: (active) => resident?.setNearbyActive(active),
       confirmLoginItem: async () =>
         options.confirmLoginItem ? options.confirmLoginItem() : confirmLoginItem(),
+      confirmRecoveryDiscard: (signal, mayHaveFinished) => (options.confirmRecoveryDiscard ?? confirmRecoveryDiscard)(signal, mayHaveFinished),
+      confirmInboxRecoveryDiscard: (signal, mayHaveFinished) => options.confirmInboxRecoveryDiscard ? options.confirmInboxRecoveryDiscard(signal, mayHaveFinished) : confirmRecoveryDiscard(signal, mayHaveFinished, true),
       confirmUpdateInstall: async () =>
         options.confirmUpdateInstall ? options.confirmUpdateInstall() : confirmUpdateInstall(),
       // The installer is running; this process is what it is replacing. The

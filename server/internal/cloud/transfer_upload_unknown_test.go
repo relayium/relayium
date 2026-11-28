@@ -95,11 +95,15 @@ func TestUploadConnectionEndedAfterTheWholeBodyIsUnknown(t *testing.T) {
 	fc := newFaultCentral(t)
 	r := atUploadPOST
 	r.Action = sendtest.DropResponse
-	fc.env.Faults.Add(&r)
+	r.Hit = make(chan struct{})
+	drop := fc.env.Faults.Add(&r)
 	c := fc.client(fc.env.TS.URL)
 	var h hookWatch
 	h.install(c)
-	id, err := h.upload(c, context.Background(), writeFaultFile(t, 3<<20+5))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	confirmAfterOrigin(c, ctx, drop.Hit)
+	id, err := h.upload(c, ctx, writeFaultFile(t, 3<<20+5))
 	if id != "" {
 		t.Fatalf("id = %q", id)
 	}
@@ -115,35 +119,80 @@ func TestUploadConnectionEndedAfterTheWholeBodyIsUnknown(t *testing.T) {
 // F2: a real gateway answers 502/504 AFTER central committed the upload.
 func TestUploadGatewayErrorAfterCentralCommittedIsUnknown(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		status int
-		modify func(*http.Response) error
+		name       string
+		status     int
+		modify     func(*http.Response) error
+		slowCommit bool
 	}{
-		// The proxy cannot use the origin's answer: its default error handler
-		// answers 502 Bad Gateway.
-		{"502 from the proxy's error handler", http.StatusBadGateway, func(*http.Response) error {
-			return errors.New("upstream answer unusable")
-		}},
+		// The proxy cannot use the origin's answer: its default error handler answers 502.
+		{"502 from the proxy's error handler", http.StatusBadGateway, func(*http.Response) error { return errors.New("upstream answer unusable") }, false},
 		{"504 in place of the origin's 200", http.StatusGatewayTimeout, func(r *http.Response) error {
 			replaceBody(r, http.StatusGatewayTimeout, strings.NewReader("gateway timeout"), int64(len("gateway timeout")))
 			return nil
-		}},
-		// The client cannot tell who chose a status: an intermediary may answer
-		// 507 after central committed exactly as it may answer 502 or 504.
+		}, false},
+		// An intermediary can also replace a successful central response with 507.
 		{"507 in place of the origin's 200", http.StatusInsufficientStorage, func(r *http.Response) error {
 			replaceBody(r, http.StatusInsufficientStorage, strings.NewReader("insufficient storage"), int64(len("insufficient storage")))
 			return nil
-		}},
+		}, false},
+		{"502 after slow central commit", http.StatusBadGateway, func(*http.Response) error { return errors.New("upstream answer unusable") }, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fc := newFaultCentral(t)
-			gw := gatewayTo(t, fc.env.TS.URL, tc.modify)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			producerStarted := make(chan struct{})
+			if tc.slowCommit {
+				// Read the entire real body first, then force commit setup past the
+				// unchanged 300ms confirmation budget. Without the origin barrier this
+				// cancels central before commit and violates this test's premise.
+				rule := atUploadPOST
+				rule.Action = sendtest.Before
+				rule.Fn = func(r *http.Request) {
+					body, err := io.ReadAll(r.Body)
+					if err != nil {
+						t.Errorf("read delayed upload body: %v", err)
+						return
+					}
+					r.Body = io.NopCloser(strings.NewReader(string(body)))
+					select {
+					case <-producerStarted:
+					case <-r.Context().Done():
+						return
+					}
+					timer := time.NewTimer(600 * time.Millisecond)
+					defer timer.Stop()
+					select {
+					case <-timer.C:
+					case <-r.Context().Done():
+					}
+				}
+				fc.env.Faults.Add(&rule)
+			}
+			originAnswered := make(chan struct{})
+			var originStatus atomic.Int32
+			gw := gatewayTo(t, fc.env.TS.URL, func(r *http.Response) error {
+				originStatus.Store(int32(r.StatusCode))
+				close(originAnswered)
+				return tc.modify(r)
+			})
 			c := fc.client(gw.URL)
 			var h hookWatch
 			h.install(c)
-			id, err := h.upload(c, context.Background(), writeFaultFile(t, 3<<20))
+			confirming := c.Confirming
+			c.Confirming = func() { confirming(); close(producerStarted) }
+			confirmAfterOrigin(c, ctx, originAnswered)
+			id, err := h.upload(c, ctx, writeFaultFile(t, 3<<20))
 			if id != "" {
 				t.Fatalf("id = %q", id)
+			}
+			select {
+			case <-originAnswered:
+			default:
+				t.Fatalf("origin never answered; post-commit gateway-fault premise was not reached: %v", err)
+			}
+			if status := originStatus.Load(); status != http.StatusOK {
+				t.Fatalf("central answered HTTP %d before gateway rewrote it; successful-commit premise was not reached", status)
 			}
 			fc.assertOneCommittedUpload(t)
 			assertUnknownOutcome(t, err)
