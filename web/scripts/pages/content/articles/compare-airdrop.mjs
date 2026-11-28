@@ -4,13 +4,14 @@
 // Terminology mirrors src/lib/i18n.svelte.ts and content/landing.mjs.
 
 const en = {
+  updated: "2026-11-28",
   title: "Relayium vs AirDrop: a cross-platform AirDrop alternative",
   description:
     "An honest look at AirDrop and Relayium. AirDrop is excellent inside Apple's ecosystem; Relayium runs in any browser so a Windows, Android or Linux device can send to an iPhone or Mac, and back.",
   updatedLabel: "Last updated",
   lead: [
     "AirDrop is one of the best file-sharing experiences ever shipped. Between an iPhone, iPad and Mac it is fast, private, and effortlessly built into the system — Relayium does not pretend to beat it on Apple's home turf.",
-    "The catch is the boundary: AirDrop only talks to other Apple devices. This article compares the two fairly, explains where AirDrop is genuinely better, and shows where Relayium helps — sending between an iPhone and a Windows PC, an Android phone and a Mac, or a Linux laptop and an iPad, straight from the browser.",
+    "Supported Android phones can share with AirDrop through Quick Share. For a Windows PC, Linux laptop or a recipient on another network, Relayium offers a browser-based route.",
   ],
   sections: [
     {
@@ -21,10 +22,10 @@ const en = {
       ],
     },
     {
-      heading: "The catch: AirDrop stays inside Apple's world",
+      heading: "Which devices can share with AirDrop?",
       body: [
-        "AirDrop simply does not exist for Windows, Android or Linux. There is no official client and no interoperability, so the moment one side of the transfer is not an Apple device, AirDrop is not an option at all.",
-        "That is exactly the gap most people hit: an iPhone photo that needs to reach a Windows PC, an Android video going to a Mac, or files moving between a Linux workstation and an iPad. The usual workarounds — a cable, email to yourself, or a cloud upload and re-download — are slower and route your files through someone else's server.",
+        "AirDrop is built into Apple devices. Some Android phones interoperate through Quick Share. Windows and Linux have no official AirDrop client.",
+        "For example, to move iPhone photos to a Windows PC, open Relayium on both screens and send the originals directly on the same network.",
       ],
     },
     {
@@ -47,9 +48,9 @@ const en = {
         "The differences that matter most, side by side:",
       ],
       bullets: [
-        "Platforms: AirDrop is Apple-only; Relayium works across Windows, macOS, Linux, Android and iOS in the browser.",
+        "Platforms: AirDrop on Apple devices works with Quick Share on supported Android phones. Relayium runs in browsers on Windows, macOS, Linux, Android and iOS.",
         "Install: AirDrop is built into Apple's system; Relayium needs no app or install, just a web page.",
-        "Across networks: AirDrop is nearby-only; Relayium connects directly on the same Wi-Fi, or across networks with a pairing code over an encrypted relay.",
+        "Across networks: AirDrop starts with nearby devices; Relayium connects directly on the same Wi-Fi, or across networks with a pairing code over an encrypted relay.",
         "Encryption: both are encrypted; Relayium adds X25519 + AES-256-GCM with a 6-digit code you verify and per-file SHA-256 checks.",
         "Large files on mobile: AirDrop is smoother; Relayium warns above roughly 256 MB when the browser has to buffer in memory, while Chrome and Edge stream straight to disk with no such ceiling.",
         "Account: AirDrop never needs one; Relayium needs no account on the same network, but signing in is required to create a pairing code for a cross-network transfer or a stored download link — the person receiving never needs an account.",
@@ -61,7 +62,7 @@ const en = {
     items: [
       {
         q: "Is there an AirDrop for Windows?",
-        a: "No — AirDrop is exclusive to Apple devices and has no Windows client. Relayium is the cross-platform alternative: it runs in any browser, so a Windows PC can send to and receive from an iPhone or Mac just as easily as between two Apple devices.",
+        a: "There is no official AirDrop client for Windows. To share between a Windows PC and an iPhone or Mac, open Relayium in a browser on both devices.",
       },
       {
         q: "How do I send a file from an iPhone to a Windows PC?",
@@ -81,13 +82,14 @@ const en = {
 };
 
 const zh = {
+  updated: "2026-11-28",
   title: "Relayium 对比 AirDrop：跨平台的隔空投送替代方案",
   description:
     "客观看待 AirDrop 与 Relayium。AirDrop 在 Apple 生态内体验出色；Relayium 在任意浏览器里运行，让 Windows、Android、Linux 设备也能与 iPhone、Mac 互传。",
   updatedLabel: "最近更新",
   lead: [
     "AirDrop 是有史以来最出色的文件分享体验之一。在 iPhone、iPad 与 Mac 之间，它快速、私密，又天然融入系统——Relayium 并不打算在 Apple 的主场上胜过它。",
-    "问题在于边界：AirDrop 只能与其他 Apple 设备互通。本文客观对比两者，说明 AirDrop 真正更好的地方，也展示 Relayium 能帮上忙的场景——直接在浏览器里完成 iPhone 与 Windows 电脑、Android 手机与 Mac、或 Linux 笔记本与 iPad 之间的互传。",
+    "部分安卓手机可以通过 Quick Share 与 AirDrop 互传。要发给 Windows、Linux 设备，或者异地互传，可以在两端打开 Relayium。",
   ],
   sections: [
     {
@@ -98,10 +100,10 @@ const zh = {
       ],
     },
     {
-      heading: "问题所在：AirDrop 只活在 Apple 的世界里",
+      heading: "哪些设备可以用 AirDrop 互传？",
       body: [
-        "AirDrop 在 Windows、Android 或 Linux 上根本不存在。没有官方客户端，也没有互通，所以只要传输一方不是 Apple 设备，AirDrop 就完全不是选项。",
-        "而这正是多数人会撞上的空缺：iPhone 里的照片要发到 Windows 电脑、Android 视频要传给 Mac，或者文件要在 Linux 工作站与 iPad 之间往返。常见的绕路办法——数据线、给自己发邮件、或上传到网盘再下载——都更慢，而且要让文件经过别人的服务器。",
+        "Apple 设备内置 AirDrop。部分安卓手机可通过 Quick Share 与它互传；Windows 和 Linux 没有官方 AirDrop 客户端。",
+        "例如，要把 iPhone 照片发到 Windows 电脑，可以在两端打开 Relayium，同一网络下能直接发送原图。",
       ],
     },
     {
@@ -124,9 +126,9 @@ const zh = {
         "把最关键的差别并排列出：",
       ],
       bullets: [
-        "平台：AirDrop 仅限 Apple；Relayium 在浏览器里横跨 Windows、macOS、Linux、Android 与 iOS。",
+        "平台：Apple 设备的 AirDrop 可与部分安卓手机的 Quick Share 互通。Relayium 支持 Windows、macOS、Linux、安卓和 iOS 浏览器。",
         "安装：AirDrop 内建于 Apple 系统；Relayium 无需 App、无需安装，一个网页即可。",
-        "跨网络：AirDrop 只能就近；Relayium 在同一 Wi-Fi 下直连，用配对码跨网络时则经由加密中继连接。",
+        "跨网络：AirDrop 需就近发起；Relayium 在同一 Wi-Fi 下直连，用配对码跨网络时则经由加密中继连接。",
         "加密：两者都加密；Relayium 额外叠加 X25519 + AES-256-GCM，配以你亲自核对的 6 位校验码和逐文件 SHA-256 校验。",
         "移动端大文件：AirDrop 更顺滑；Relayium 在浏览器只能攒内存时，会在超过约 256 MB 时给出提示，而 Chrome 与 Edge 直接流式写盘，没有这道门槛。",
         "账号：AirDrop 从不需要账号；Relayium 在同一网络下无需账号，但要创建跨网络配对码或生成存储下载链接就需要登录——收件的一方始终无需账号。",
@@ -138,7 +140,7 @@ const zh = {
     items: [
       {
         q: "Windows 有 AirDrop 吗？",
-        a: "没有——AirDrop 是 Apple 设备专属，没有 Windows 客户端。Relayium 就是那条跨平台的替代路径：它在任意浏览器里运行，Windows 电脑与 iPhone 或 Mac 互发互收，和两台 Apple 设备之间一样轻松。",
+        a: "Windows 没有官方 AirDrop 客户端。要与 iPhone 或 Mac 互传文件，可以在两台设备上用浏览器打开 Relayium。",
       },
       {
         q: "iPhone 上的文件怎么传到 Windows 电脑？",

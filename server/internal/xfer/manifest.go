@@ -22,17 +22,43 @@ func WarnIfEmpty(m Manifest, w io.Writer) {
 // use forward slashes, so `push ./dir` reproduces `dir/...` on the receiver.
 // Only regular files are included; symlinks and special files are skipped.
 func BuildManifest(roots []string) (Manifest, []string, error) {
+	m, srcs, _, err := BuildFilteredManifest(roots, nil)
+	return m, srcs, err
+}
+
+// BuildFilteredManifest applies the caller's excludes while walking the tree.
+func BuildFilteredManifest(roots []string, excludes Excludes) (Manifest, []string, Excluded, error) {
 	var m Manifest
 	var srcs []string
+	var excluded Excluded
 	for _, root := range roots {
 		absRoot, err := filepath.Abs(root)
 		if err != nil {
-			return Manifest{}, nil, err
+			return Manifest{}, nil, Excluded{}, err
 		}
 		parent := filepath.Dir(absRoot)
 		err = filepath.WalkDir(absRoot, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
+			}
+			if len(excludes) != 0 && (p != absRoot || !d.IsDir()) {
+				relative, err := filepath.Rel(absRoot, p)
+				if err != nil {
+					return err
+				}
+				if relative == "." {
+					relative = d.Name()
+				}
+				if excludes.matches(filepath.ToSlash(relative)) {
+					if d.IsDir() {
+						excluded.Directories++
+						return fs.SkipDir
+					}
+					if d.Type().IsRegular() {
+						excluded.Files++
+					}
+					return nil
+				}
 			}
 			if d.IsDir() || !d.Type().IsRegular() {
 				return nil
@@ -55,8 +81,8 @@ func BuildManifest(roots []string) (Manifest, []string, error) {
 			return nil
 		})
 		if err != nil {
-			return Manifest{}, nil, err
+			return Manifest{}, nil, Excluded{}, err
 		}
 	}
-	return m, srcs, nil
+	return m, srcs, excluded, nil
 }

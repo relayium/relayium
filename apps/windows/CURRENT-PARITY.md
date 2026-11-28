@@ -1,11 +1,9 @@
-> Windows 0.0.4 unsigned x64 public preview was published on 2026-11-23 from
-> `189c037f2ad7d23e0d76354babb7f84da84d4ea3`. It adds in-app email/password
-> sign-in and retains optional browser authorization. Download:
-> https://github.com/relayium/relayium/releases/tag/windows-v0.0.4
-> There is no public signed release or enabled automatic update feed. The
-> installed-artifact and hosted Windows acceptance passed; personal Windows and
-> real-network testing remain open. Earlier candidate records below retain
-> their original dates and boundaries.
+> Windows 0.0.6 unsigned x64 public preview was published on 2026-11-27 from
+> `7409f16e9f6885169ac881e8f8c50dde1b3a908f`. Long Device Inbox messages fold independently.
+> Copy preserves the full body with the message expanded or collapsed. Download:
+> https://github.com/relayium/relayium/releases/tag/windows-v0.0.6
+> Updates are manual. The Windows clipboard and installed-artifact tests passed.
+> The earlier candidate records below retain their original scope.
 
 # Windows candidate against macOS 1.5.2
 

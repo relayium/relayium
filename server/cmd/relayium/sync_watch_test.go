@@ -84,8 +84,8 @@ func TestSyncWatchValidatesBeforeTheFirstSync(t *testing.T) {
 	}
 }
 
-// Without --watch, sync is still one shot: it must not start watching or retry.
-func TestSyncWithoutWatchDoesNotRetry(t *testing.T) {
+// A one-shot sync to an initially closed port should fail immediately.
+func TestSyncWithoutWatchFailsOnInitiallyClosedPort(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
 		t.Fatal(err)
@@ -94,8 +94,8 @@ func TestSyncWithoutWatchDoesNotRetry(t *testing.T) {
 	if rc == 0 {
 		t.Fatal("syncing to a dead port should fail")
 	}
-	if strings.Contains(errOut, "retrying in") {
-		t.Fatalf("a one-shot sync scheduled a retry:\n%s", errOut)
+	if strings.Contains(errOut, "Reconnecting") {
+		t.Fatalf("a sync to an initially closed port scheduled a retry:\n%s", errOut)
 	}
 }
 

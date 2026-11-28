@@ -368,6 +368,26 @@ public enum InboxMessagePresentation {
                       language: language)
     }
 
+    /// A display-only prefix. Nil means the whole message fits the preview
+    /// budget, so it needs no disclosure control.
+    public static func collapsedPreview(_ text: String) -> String? {
+        let scalars = text.unicodeScalars
+        var previousWasCR = false
+        var lineCount = 1
+        for (count, index) in scalars.indices.enumerated() {
+            let value = scalars[index].value
+            let startsLine = ((0x0A...0x0D).contains(value)
+                || value == 0x85 || value == 0x2028 || value == 0x2029)
+                && !(previousWasCR && value == 0x0A)
+            if count == 160 || (startsLine && lineCount == 4) {
+                return String(scalars[..<index]) + "…"
+            }
+            if startsLine { lineCount += 1 }
+            previousWasCR = value == 0x0D
+        }
+        return nil
+    }
+
     /// The accessible name of one row's Copy control.
     ///
     /// Visible, the button is the compact Copy/Copied pair every other copy

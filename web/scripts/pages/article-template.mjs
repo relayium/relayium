@@ -411,7 +411,13 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
     ],
   };
 
-  const lead = (doc.lead || []).map((p) => `<p class="lead">${esc(p)}</p>`).join("\n      ");
+  const lead = (doc.lead || []).map((paragraph, index) => {
+    const text = `<p class="lead">${esc(paragraph)}</p>`;
+    if (index === 0 && doc.quickStart) {
+      return `${text}\n      <a class="cta" href="${ctaHref(lang)}">${esc(doc.quickStart)}</a>`;
+    }
+    return text;
+  }).join("\n      ");
   // Explicit arrow, not a bare `map(sectionHtml)`: map's second argument is the
   // index, which would silently arrive as the `rtl` flag and make section 0 LTR
   // and every later section RTL on the same page.

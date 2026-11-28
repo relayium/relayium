@@ -137,7 +137,7 @@ const observed = {
   receivedMessages: [],
   /**
    * The fullest thread this run ever actually saw, read from the REAL history
-   * (`[data-test="history"] li`, whose text content is `{entry.body}` and
+   * (`[data-test="history"] [data-test="text-body"]`, whose text content is `{entry.body}` and
    * nothing else — never the composer, so never a draft read back).
    *
    * A high-water mark rather than a final snapshot because `LinkPane`'s message
@@ -322,7 +322,7 @@ const sendFiles = (win, files) =>
 
 /** Everything the thread is showing, for the orchestrator to compare. */
 const readMessages = (win) =>
-  js(win, `[...document.querySelectorAll('[data-test="history"] li')].map((el) => el.textContent)`);
+  js(win, `[...document.querySelectorAll('[data-test="history"] [data-test="text-body"]')].map((el) => el.textContent)`);
 
 /**
  * Watch ONE receive, recording each thing as it actually happens.
@@ -344,7 +344,7 @@ const readMessages = (win) =>
  * naming exactly what did not happen — nothing here is permitted to pass by
  * being skipped.
  *
- * The thread is read from `[data-test="history"] li` on every pass and kept as a
+ * The thread is read from `[data-test="history"] [data-test="text-body"]` on every pass and kept as a
  * HIGH-WATER MARK. That is not a convenience: `LinkPane`'s message Card is
  * `{#if connected}`, so the moment the peer leaves the room the Card unmounts
  * and a final read returns `[]` however much was delivered into it. The peak is

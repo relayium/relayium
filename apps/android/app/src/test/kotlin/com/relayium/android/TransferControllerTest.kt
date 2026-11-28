@@ -1055,6 +1055,60 @@ class TransferControllerTest {
     }
 
     @Test
+    fun `an interrupted send keeps its place and finishes when the same link recovers`() {
+        val rig = rig()
+        connect(rig)
+        val link = rig.controller.state.value.linkId
+        val firstChunk = RealtimeFrame.CHUNK_SIZE
+        val waitingForTail = CountDownLatch(1)
+        val releaseTail = CountDownLatch(1)
+        val tailRead = CountDownLatch(1)
+        val source = TransferController.OutgoingSource(FileMeta("recovery.bin", firstChunk.toLong() + 1)) {
+            object : ByteArrayInputStream(ByteArray(firstChunk + 1) { 7 }) {
+                override fun read(bytes: ByteArray, offset: Int, length: Int): Int {
+                    if (pos == firstChunk) {
+                        waitingForTail.countDown()
+                        check(releaseTail.await(5, TimeUnit.SECONDS))
+                    }
+                    return super.read(bytes, offset, length).also {
+                        if (pos == firstChunk + 1) tailRead.countDown()
+                    }
+                }
+            }
+        }
+        rig.controller.sendFiles(listOf(source))
+        awaitTrue("manifest out") { rig.transport.fileFrames.size == 1 }
+        rig.transport.events.onFileFrame(RealtimeFrame.ACCEPT)
+        try {
+            assertTrue(waitingForTail.await(5, TimeUnit.SECONDS))
+            val priorProgress = rig.controller.state.value.sendProgress
+            val priorFrames = rig.transport.fileFrames.size
+            rig.transport.events.onInterrupted(true)
+            rig.transport.acceptFile = false
+            releaseTail.countDown()
+            assertTrue(tailRead.await(5, TimeUnit.SECONDS))
+            // Let the pending read return to the session executor and cross
+            // several of its send checks while the connection is unavailable.
+            Thread.sleep(150)
+            assertTrue(rig.controller.state.value.linkInterrupted)
+            assertEquals(priorProgress, rig.controller.state.value.sendProgress)
+            assertEquals(priorFrames, rig.transport.fileFrames.size)
+            assertEquals(link, rig.controller.state.value.linkId)
+        } finally {
+            releaseTail.countDown()
+        }
+        rig.transport.acceptFile = true
+        rig.transport.events.onInterrupted(false)
+        awaitTrue("the file finished over the original link") {
+            rig.transport.fileFrames.any { RealtimeFrame.kindOf(it) == RealtimeFrame.KIND_DONE_ENC }
+        }
+        rig.transport.events.onFileFrame(RealtimeFrame.COMPLETE)
+        awaitTrue("receiver acknowledgement completed the batch") { rig.controller.state.value.sentBatch }
+        assertEquals(link, rig.controller.state.value.linkId)
+        assertEquals(1, manifestsSent(rig))
+    }
+
+    @Test
     fun `cancelling the send closes a stream blocked inside its read`() {
         val rig = rig()
         connect(rig)

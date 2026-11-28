@@ -18,6 +18,7 @@
     <string name="status_connecting">正在连接…</string>
     <string name="status_waiting_peer">正在等待另一台设备…</string>
     <string name="status_connected">已连接</string>
+    <string name="status_link_recovering">正在重连</string>
     <string name="status_verification_code">验证码 %1$s</string>
     <string name="status_verification_hint">可选。只有对方开启了验证，它才会显示这六位数字；显示时两边应当一致。</string>
     <string name="status_verification_show">显示验证码</string>
@@ -83,6 +84,8 @@
     <string name="text_too_long">这条消息超过了单条消息的上限（%1$d / %2$d 字节）。</string>
     <string name="text_from_peer">来自另一台设备</string>
     <string name="text_from_me">来自本机</string>
+    <string name="text_copy_message">复制</string>
+    <string name="text_message_copied">已复制</string>
     <string name="text_requested">正在等待另一台设备接受对话…</string>
     <string name="text_failed">这条连接上的消息功能已停止。文件可能仍然可用；重新建立会话可恢复消息。</string>
     <string name="text_legacy_unavailable">此连接是文件会话。若要发送消息，请断开连接，待对方设备发起消息会话后重新配对。</string>

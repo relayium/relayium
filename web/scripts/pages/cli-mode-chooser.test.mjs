@@ -50,8 +50,20 @@ import { buildArticlePages } from "./build-pages.mjs";
 import { LANGS, MAINTAINED_LANGS, FROZEN_LANGS } from "./shared.mjs";
 
 const REWRITTEN_ON = "2026-09-01";
+const SYNC_REVISION = "2026-11-25";
+const SYNC_UPDATED = new Set([
+  "cli-getting-started",
+  "cli-backup-server-ssh",
+  "cli-server-to-server",
+  "cli-sync-large-folder",
+  "howto-automate-server-backups",
+]);
+const expectedDate = (name) => {
+  if (name === "cli-sync-large-folder") return "2026-11-27";
+  return SYNC_UPDATED.has(name) ? SYNC_REVISION : REWRITTEN_ON;
+};
 
-/** The six documents this batch factually rewrote, and nothing else. */
+/** The six or seven documents revised in either batch, and nothing else. */
 const REWRITTEN = {
   "cli-getting-started": cliGettingStarted,
   "cli-backup-server-ssh": cliBackupSsh,
@@ -59,12 +71,12 @@ const REWRITTEN = {
   "cli-server-to-server": cliServerToServer,
   "guides-receive-from-cli": guidesReceiveFromCli,
   "howto-automate-server-backups": howtoAutomateBackups,
+  "cli-sync-large-folder": cliSyncLargeFolder,
 };
 
-/** The other three CLI guides. Untouched, so their own dates stand. */
+/** The other two CLI guides. Untouched, so their own dates stand. */
 const UNTOUCHED = {
   "cli-send-to-someone": cliSendToSomeone,
-  "cli-sync-large-folder": cliSyncLargeFolder,
   "guides-device-inbox-server": guidesDeviceInboxServer,
 };
 
@@ -81,13 +93,14 @@ const STALE_BEFORE = {
   "cli-server-to-server": "2026-08-05",
   "guides-receive-from-cli": "2026-08-06",
   "howto-automate-server-backups": "2026-08-06",
+  "cli-sync-large-folder": "2026-08-05",
 };
 
 describe("the rewritten CLI guides carry the date of their rewrite", () => {
-  it("dates exactly the six documents this batch rewrote", () => {
-    expect(Object.keys(REWRITTEN)).toHaveLength(6);
+  it("records the current dates for the revised guides", () => {
+    expect(Object.keys(REWRITTEN)).toHaveLength(7);
     for (const [name, article] of Object.entries(REWRITTEN)) {
-      expect(article.updated, name).toBe(REWRITTEN_ON);
+      expect(article.updated, name).toBe(expectedDate(name));
     }
   });
 
@@ -95,7 +108,7 @@ describe("the rewritten CLI guides carry the date of their rewrite", () => {
     // The guard that gives the rule above its teeth. Without it, "set every CLI
     // article to today" passes the first test and republishes three documents as
     // freshly reviewed when nobody read them.
-    expect(Object.keys(UNTOUCHED)).toHaveLength(3);
+    expect(Object.keys(UNTOUCHED)).toHaveLength(2);
     for (const [name, article] of Object.entries(UNTOUCHED)) {
       expect(article.updated, `${name} was re-dated without being rewritten`).not.toBe(
         REWRITTEN_ON,
@@ -117,10 +130,10 @@ describe("the rewritten CLI guides carry the date of their rewrite", () => {
       expect(pages, name).toHaveLength(LANGS.length);
       for (const page of pages) {
         expect(page.html, `${name}: ${page.path} dateModified`).toContain(
-          `"dateModified":"${REWRITTEN_ON}"`,
+          `"dateModified":"${expectedDate(name)}"`,
         );
         expect(page.html, `${name}: ${page.path} visible date`).toContain(
-          `<bdi>${REWRITTEN_ON}</bdi>`,
+          `<bdi>${expectedDate(name)}</bdi>`,
         );
         expect(page.html, `${name}: ${page.path} still shows ${stale.get(name)}`).not.toContain(
           stale.get(name),

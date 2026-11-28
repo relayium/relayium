@@ -6,13 +6,15 @@
 import { browserCrossNetworkSection } from "../realtime-facts.mjs";
 
 const en = {
+  updated: "2026-11-28",
+  quickStart: "Open transfer page",
   title: "How to transfer files from Android to iPhone (no cable)",
   description:
     "A step-by-step guide to sending photos, videos and documents from Android to iPhone in a browser — no AirDrop, no cable, no cloud upload. Just open Relayium on both devices.",
   updatedLabel: "Last updated",
   lead: [
-    "Android and iPhone do not share an AirDrop, so moving a few photos or a video between them usually means a USB cable, a chat app that compresses your images, or a round-trip through some cloud drive. All three are slower and more fiddly than they should be.",
-    "Relayium skips all of that. Both phones open the same page: on the same LAN the end-to-end encrypted files travel directly, while across networks a TURN relay carries ciphertext it cannot read or decrypt and keeps no realtime content copy or history. No app is needed; the creator signs in for cross-network pairing, while the person joining never needs an account. This guide walks through it step by step.",
+    "Open Relayium on both phones on the same Wi-Fi. On Android, choose the iPhone and select the photos, videos or documents to send. Accept the transfer on the iPhone and save the files.",
+    "Supported Android phones can also share with AirDrop through Quick Share. The browser steps below work on phones without that feature. Files travel directly on the same LAN. Across networks a TURN relay forwards ciphertext it cannot read or decrypt and keeps no realtime content copy or history. The pairing code creator signs in; the person joining never needs an account.",
   ],
   sections: [
     {
@@ -145,13 +147,15 @@ const en = {
 };
 
 const zh = {
+  updated: "2026-11-28",
+  quickStart: "打开传输页",
   title: "如何把文件从安卓传到 iPhone（无需数据线）",
   description:
     "一步步教你在浏览器里把照片、视频和文档从安卓传到 iPhone——不用 AirDrop、不用数据线、不用上传网盘。两台设备打开 Relayium 即可。",
   updatedLabel: "最近更新",
   lead: [
-    "安卓和 iPhone 之间没有互通的 AirDrop，所以在两者间传几张照片或一段视频，往往只能靠 USB 数据线、会压缩画质的聊天软件，或者绕一圈网盘上传下载。三种方式都比本该有的更慢、更折腾。",
-    "Relayium 把这些统统省掉。两台手机打开同一个网页：同一局域网内，端到端加密的文件会直接传输；跨网络时，TURN 中继只搬运它无法读取或解密的密文，也不保留实时内容副本或历史。无需安装应用；跨网络配对由创建者登录，加入者始终无需账号。本文一步步带你完成。",
+    "两台手机连上同一 Wi-Fi，在浏览器里打开 Relayium。在安卓手机上选中 iPhone，选择要发送的照片、视频或文档，再到 iPhone 上接受传输并保存文件。",
+    "部分安卓手机支持用 Quick Share 与 AirDrop 互传。机型不支持时，也可以按下面的步骤用浏览器发送。同一局域网内文件直传。异地互传时，TURN 中继只转发它无法读取或解密的密文，不保留实时内容副本或历史。配对码由创建者登录后生成，加入者始终无需账号。",
   ],
   sections: [
     {

@@ -209,7 +209,7 @@ const ja = {
     {
       heading: "Relayium sync のやり方",
       body: [
-        "relayium sync <ソース...> <宛先> [--delete] [--watch] は一方向の増分ミラーです。各ファイルのサイズと更新時刻を比較し、すでに一致するものはスキップし、残りを送ります。",
+        "relayium sync · TLS. 現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。 再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。",
         "動作するのはデーモン直結です。relayium://host[:port] を指定すると SSH を完全に省けます。証明書ピンニング付きの TLS 1.3 接続で、相手のマシンで動く relayium serve リスナーに直接つながり、そのマシンのフィンガープリントで認証されます（一度承認すれば以後は記憶されます）。sshd の設定も SSH 鍵の管理も不要で、relayium がインストールされた2台のマシンと、間で開いたポートさえあればよいのです。以前あった user@host:/dest 形式の SSH 経由の sync は廃止され、現在の CLI では「SSH transfers are currently disabled」と表示して拒否されます。",
       ],
       code: [
@@ -301,7 +301,7 @@ const ko = {
     {
       heading: "Relayium sync의 방식",
       body: [
-        "relayium sync <소스...> <대상> [--delete] [--watch]는 단방향 증분 미러입니다. 각 파일의 크기와 수정 시각을 비교해 이미 일치하는 것은 건너뛰고 나머지만 보냅니다.",
+        "relayium sync · TLS. 최신 수신기는 크기와 SHA-256이 같은 파일을 건너뜁니다. 이전 수신기는 크기와 mtime으로 대체할 수 있으므로 내용 비교를 요구하려면 --checksum을 사용하세요. 다시 실행하면 검증된 앞부분을 재사용할 수 있습니다. 검증된 앞부분이 없는 중단 파일은 다시 보내고, 검증이 끝난 파일은 건너뜁니다.",
         "데몬 다이렉트로 동작합니다. relayium://host[:port]를 가리키면 SSH를 완전히 건너뜁니다. 인증서 고정 TLS 1.3 연결로 상대 기기에서 실행 중인 relayium serve 리스너에 직접 연결되며, 그 기기의 핑거프린트로 인증됩니다(한 번 승인하면 이후로는 기억됩니다). sshd를 설정할 필요도, SSH 키를 관리할 필요도 없이, relayium이 설치된 두 기기와 그 사이의 열린 포트 하나만 있으면 됩니다. 예전의 user@host:/dest 형식 SSH 기반 sync는 폐지되었으며, 현재 CLI는 “SSH transfers are currently disabled”라는 메시지와 함께 거부합니다.",
       ],
       code: [
@@ -393,7 +393,7 @@ const de = {
     {
       heading: "Was Relayium sync stattdessen macht",
       body: [
-        "relayium sync <Quelle...> <Ziel> [--delete] [--watch] ist ein einseitiger inkrementeller Spiegel: Er vergleicht Größe und Änderungszeit jeder Datei, überspringt, was schon übereinstimmt, und sendet den Rest.",
+        "relayium sync · TLS. Aktuelle Empfänger überspringen Dateien mit gleicher Größe und gleichem SHA-256. Ältere Empfänger können auf Größe und mtime zurückfallen; --checksum erzwingt den Inhaltsvergleich. Ein weiterer Lauf kann ein geprüftes Präfix wiederverwenden. Eine unterbrochene Datei ohne solches Präfix wird neu gesendet; vollständig geprüfte Dateien werden übersprungen.",
         "Es läuft über daemon-direct. Zeigst du auf relayium://host[:port], wird SSH komplett übersprungen: eine TLS-1.3-Verbindung mit Pinning direkt zu einem relayium serve-Listener auf der anderen Maschine, authentifiziert über deren Fingerprint (einmal genehmigt, danach gemerkt). Kein sshd einzurichten, keine SSH-Schlüssel zu verwalten — nur zwei Maschinen mit installiertem relayium und einem offenen Port dazwischen. Das frühere sync über SSH zu einem Ziel user@host:/dest ist eingestellt; die aktuelle CLI lehnt es mit „SSH transfers are currently disabled“ ab.",
       ],
       code: [
@@ -485,7 +485,7 @@ const fr = {
     {
       heading: "Ce que fait Relayium sync à la place",
       body: [
-        "relayium sync <sources...> <destination> [--delete] [--watch] est un miroir incrémental à sens unique : il compare la taille et la date de modification de chaque fichier, ignore ce qui correspond déjà, et envoie le reste.",
+        "relayium sync · TLS. Les récepteurs récents ignorent les fichiers dont la taille et le SHA-256 correspondent. Les anciens peuvent revenir à la taille et au mtime. --checksum impose la comparaison du contenu. Une nouvelle exécution peut réutiliser un préfixe vérifié. Un fichier interrompu sans préfixe vérifié repart du début et les fichiers terminés et vérifiés sont ignorés.",
         "Il fonctionne en daemon-direct. Pointez-le vers relayium://host[:port] et il se passe entièrement de SSH : une connexion TLS 1.3 avec épinglage directement vers un processus relayium serve à l'écoute sur l'autre machine, authentifiée par l'empreinte de cette machine (approuvée une fois, mémorisée ensuite). Pas de sshd à configurer, pas de clés SSH à gérer — juste deux machines avec relayium installé et un port ouvert entre elles. L'ancien sync via SSH vers une destination user@host:/dest est retiré ; la CLI actuelle le refuse avec « SSH transfers are currently disabled ».",
       ],
       code: [
@@ -577,7 +577,7 @@ const ar = {
     {
       heading: "ما يفعله Relayium sync بدلًا من ذلك",
       body: [
-        "إن ‎relayium sync <src...> <dest> [--delete] [--watch]‎ مرآة تزايدية أحادية الاتجاه: يقارن حجم كل ملف ووقت تعديله، ويتخطّى ما يطابق أصلًا، ويرسل الباقي.",
+        "relayium sync · TLS. يتخطّى المستقبِل الحديث الملفات التي يتطابق حجمها وبصمة SHA-256 لها. قد يرجع المستقبِل القديم إلى الحجم وmtime؛ استخدم --checksum لاشتراط مقارنة المحتوى. قد تعيد المحاولة استخدام بادئة جرى التحقق منها. يبدأ الملف المنقطع بلا بادئة صالحة من جديد، وتُتخطّى الملفات المكتملة التي جرى التحقق منها.",
         "يعمل عبر daemon direct. وجّهه إلى ‎relayium://host[:port]‎ فيتخطّى SSH كليًا: اتصال TLS 1.3 مثبَّت مباشرة إلى مستمع relayium serve على الجهاز الآخر، مُصادَق عليه ببصمة ذلك الجهاز (يُوافَق عليها مرة، وتُذكَر بعد ذلك). لا sshd لإعداده، ولا مفاتيح SSH لإدارتها — فقط جهازان عليهما relayium ومنفذ مفتوح بينهما. أما sync القديم عبر SSH إلى وجهة ‎user@host:/dest‎ فقد أُوقف، ويرفضه CLI الحالي برسالة «SSH transfers are currently disabled».",
       ],
       code: [
@@ -669,7 +669,7 @@ const es = {
     {
       heading: "Lo que hace Relayium sync en su lugar",
       body: [
-        "relayium sync <src...> <dest> [--delete] [--watch] es un espejo incremental de un solo sentido: compara el tamaño y la hora de modificación de cada archivo, omite lo que ya coincide y envía el resto.",
+        "relayium sync · TLS. Los receptores actuales omiten archivos con el mismo tamaño y SHA-256. Los antiguos pueden recurrir al tamaño y al mtime; --checksum exige comparar el contenido. Otra ejecución puede reutilizar un prefijo verificado. Un archivo interrumpido sin prefijo verificado vuelve a enviarse y los archivos completos verificados se omiten.",
         "Funciona con daemon directo. Apúntalo a relayium://host[:port] y se salta SSH por completo: una conexión TLS 1.3 con anclaje directamente a un proceso a la escucha relayium serve en la otra máquina, autenticada por la huella de esa máquina (aprobada una vez, recordada después). Ningún sshd que configurar, ninguna clave SSH que gestionar: solo dos máquinas con relayium instalado y un puerto abierto entre ellas. El antiguo sync por SSH a un destino user@host:/dest está retirado; la CLI actual lo rechaza con «SSH transfers are currently disabled».",
       ],
       code: [
@@ -761,7 +761,7 @@ const pt = {
     {
       heading: "O que o Relayium sync faz em vez disso",
       body: [
-        "relayium sync <src...> <dest> [--delete] [--watch] é um espelho incremental de sentido único: ele compara o tamanho e a hora de modificação de cada arquivo, pula o que já corresponde e envia o resto.",
+        "relayium sync · TLS. Receptores atuais ignoram arquivos de mesmo tamanho e SHA-256. Os antigos podem usar tamanho e mtime; --checksum exige a comparação do conteúdo. Outra execução pode reutilizar um prefixo verificado. Um arquivo interrompido sem prefixo verificado é reenviado; arquivos completos e verificados são ignorados.",
         "Ele funciona com daemon direto. Aponte-o para relayium://host[:port] e ele pula o SSH inteiramente: uma conexão TLS 1.3 com fixação diretamente a um processo relayium serve à escuta na outra máquina, autenticada pela impressão digital dessa máquina (aprovada uma vez, lembrada depois). Nenhum sshd para configurar, nenhuma chave SSH para gerenciar — apenas duas máquinas com o relayium instalado e uma porta aberta entre elas. O antigo sync por SSH para um destino user@host:/dest foi descontinuado; a CLI atual o recusa com “SSH transfers are currently disabled”.",
       ],
       code: [
@@ -839,7 +839,7 @@ const currentEn = {
   updatedLabel: "Last updated",
   lead: ["rsync is a mature general-purpose synchronizer. Relayium sync is a narrower one-way mirror to a relayium serve listener over pinned TLS.", "Relayium's SSH transport is retired: current sync accepts relayium:// destinations only, with no -i or -p flags."],
   sections: [
-    { heading: "What each command does", code: ["rsync -a --delete ./photos/ user@server:backups/photos/", "relayium sync ./photos relayium://server.example --delete --watch"], body: ["rsync commonly travels over SSH and has a rich option set. Relayium sync uses its native daemon-direct protocol, skips unchanged files by size and modification time, verifies transferred files and can continue partial files across runs."] },
+    { heading: "What each command does", code: ["rsync -a --delete ./photos/ user@server:backups/photos/", "relayium sync ./photos relayium://server.example --delete --watch"], body: ["rsync commonly travels over SSH and supports block-level deltas. Relayium sync uses a one-way daemon-direct connection over pinned TLS. Matching size and SHA-256 let current receivers skip unchanged files. Older receivers can fall back to size and mtime; use --checksum to require content comparison. A later run can reuse a verified prefix. An interrupted file without one starts again. Completed, verified files are skipped."] },
     { heading: "Trust and deletion", bullets: ["Relayium serve accepts only authorized sender fingerprints and pins the listener on first contact.", "Relayium --delete is ignored unless the listener was started with --allow-delete.", "Neither mirror is a versioned backup; snapshots or another history layer are still needed."] },
     { heading: "Choose deliberately", bullets: ["Use rsync for its mature filtering, remote-shell ecosystem and broad interoperability.", "Use Relayium when the native authorized listener, the same CLI's pairing/Cloud modes, or its explicit receiver consent model is valuable."] },
   ],
@@ -857,7 +857,7 @@ const currentZh = {
   updatedLabel: "最近更新",
   lead: ["rsync 是成熟的通用同步工具。Relayium sync 的范围更窄：通过证书固定 TLS 向 relayium serve 监听端做单向镜像。", "Relayium 的 SSH 传输已退役：当前 sync 只接受 relayium:// 目标，也没有 -i 或 -p 参数。"],
   sections: [
-    { heading: "两条命令分别做什么", code: ["rsync -a --delete ./photos/ user@server:backups/photos/", "relayium sync ./photos relayium://server.example --delete --watch"], body: ["rsync 通常走 SSH，选项十分丰富。Relayium sync 使用原生 daemon 直连协议，按大小与修改时间跳过未变文件，校验真正传输的文件，并能跨运行继续半截文件。"] },
+    { heading: "两条命令分别做什么", code: ["rsync -a --delete ./photos/ user@server:backups/photos/", "relayium sync ./photos relayium://server.example --delete --watch"], body: ["rsync 通常走 SSH，并支持块级增量。Relayium sync 使用证书固定的 TLS 直连进行单向同步。 新版接收端按大小和 SHA-256 跳过内容相同的文件。旧接收端可能回退到大小和 mtime。用 --checksum 可要求内容比对。 下次运行可以重用已验证的文件前缀。中断时没有可用前缀的文件会重传，已经传完并校验的文件会跳过。"] },
     { heading: "信任与删除", bullets: ["Relayium serve 只接受已授权的发送端指纹，并在首次连接时固定监听端。", "除非监听端以 --allow-delete 启动，否则 Relayium --delete 会被忽略。", "两者都不是带版本的备份；仍需快照或其他历史层。"] },
     { heading: "有意识地选择", bullets: ["需要成熟的过滤、远程 shell 生态与广泛兼容性时用 rsync。", "重视原生授权监听器、同一 CLI 的配对/云端模式或接收端显式同意删除时用 Relayium。"] },
   ],
@@ -873,6 +873,6 @@ const currentZh = {
 export default {
   slug: "compare/rsync",
   published: "2026-07-09",
-  updated: "2026-07-12",
+  updated: "2026-11-25",
   langs: withInstall({ en: currentEn, zh: currentZh, ja, ko, de, fr, ar, es, pt }),
 };

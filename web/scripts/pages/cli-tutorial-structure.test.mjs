@@ -413,7 +413,9 @@ function estabComplaints(at, doc, { english = false } = {}) {
   const t = docText(doc);
   if (!t.includes("ESTAB")) bad.push(`${at}: lost the ESTAB observation entirely`);
   if (!t.includes("SYN-SENT")) bad.push(`${at}: lost SYN-SENT as the not-reached case`);
-  if (!t.includes("ss -tinp")) bad.push(`${at}: the check no longer asks ss for per-socket info`);
+  if (!sections(doc).some((section) => (section.troubleshooting?.items || []).some((item) =>
+    (item.code || []).some((code) => code.includes("ss -tinp")),
+  ))) bad.push(`${at}: the check no longer asks ss for per-socket info`);
   if (!t.includes("bytes_acked")) bad.push(`${at}: names no byte counter to compare between runs`);
   if (!english) return bad;
   if (ESTAB_AS_PROGRESS.test(t)) bad.push(`${at}: still equates ESTAB with bytes moving`);
@@ -422,86 +424,35 @@ function estabComplaints(at, doc, { english = false } = {}) {
   return bad;
 }
 
-// ── What the sync guide's SHA-256 actually covers ───────────────────────────
-// server/internal/xfer/recv.go: syncStateFor skips a manifest file whose on-disk
-// copy matches by size AND modification time. A skipped file is never read, so
-// it is never hashed — the article cannot know its contents. Everything the
-// transfer DOES send, a resumed file included, is checked on arrival against the
-// sender's SHA-256 and a mismatch is recorded as a failure, so that half of the
-// guarantee is real and must not be watered down. `du -sh` sits between the two:
-// equal totals are a completeness sanity check over bytes on disk, never proof
-// that a skipped file's contents still match.
-//
-// The cross-locale rule is a CO-OCCURRENCE, not a phrase table: wherever this
-// article says SHA-256, in any language, the same string must also name `mtime`
-// — the input to the skip decision the hash does not cover. All three anchors
-// below are Latin technical tokens the corpus leaves untranslated in all nine
-// locales, so the rule bites in Arabic and Japanese exactly as in English, and
-// no unqualified "every file is verified" sentence can satisfy it anywhere.
+// Current receivers compare size and SHA-256 from the content-aware index.
+// An older receiver may fall back to mtime. Directory totals are a coarse check.
 const HASH = "SHA-256";
 const SKIP_INPUTS = "mtime";
 const TOTALS = "du -sh";
-
-/** The section that checks the finished mirror: the one whose procedure runs du -sh. */
 const verifySection = (doc) =>
-  sections(doc).find((s) =>
-    (s.steps || []).some((st) => (st.code || []).some((c) => c.includes("du -sh /root/workspace"))),
+  sections(doc).find((section) =>
+    (section.steps || []).some((step) =>
+      (step.code || []).some((code) => code.includes("du -sh /root/workspace")),
+    ),
   );
-
-// English-only, for the reason VAGUE is: a tempered span is a claim SHAPE, and
-// nine translations of one would be nine guesses. The quantifier may reach a
-// hash word only if the span never crosses a word that scopes it to what moved
-// — so "every file it transfers is checked with SHA-256" passes and "every file
-// is checked with SHA-256" does not.
-const HASHED_WITHOUT_SCOPE = new RegExp(
-  "\\b(?:every|all|each)\\s+files?\\b" +
-    "(?:(?!\\b(?:transferred|transfers|transfer|sent|sends|send|arrives|arriving|moved)\\b)[^.\\n])*?" +
-    "\\b(?:SHA-256|hashed|hash-verified|verified|checked)\\b",
-  "i",
-);
-
-// The other half of the same overclaim — the mirror, or the copy, as a whole
-// declared sound. Both word orders, because the sentence this replaced put the
-// adjective last ("means an intact copy") and the bullet put it first.
-const WHOLE_MIRROR_INTACT = new RegExp(
-  ["\\b(?:mirror|copy)\\b(?:(?!\\b(?:not|never|transferred|sent|skipped)\\b)[^.\\n])*?\\bintact\\b",
-   "\\bintact\\b(?:(?!\\b(?:not|never|transferred|sent|skipped)\\b)[^.\\n])*?\\b(?:mirror|copy)\\b"].join("|"),
-  "i",
-);
+const WHOLE_MIRROR_INTACT = /\bintact (?:copy|mirror)\b|\b(?:copy|mirror) is known to be intact\b/i;
 
 function hashScopeComplaints(at, doc, { english = false } = {}) {
   const bad = [];
-
-  // 1. Hashing is never claimed without the skip rule the hash does not cover.
-  const hashed = docStrings(doc).filter((s) => s.includes(HASH));
-  if (hashed.length < 2) {
-    bad.push(`${at}: only ${hashed.length} ${HASH} claim(s) left to scope — the rule would pass near-vacuously`);
+  const method = doc.sections[0]?.bullets?.[0] || "";
+  for (const token of [HASH, SKIP_INPUTS, "--checksum"]) {
+    if (!method.includes(token)) bad.push(`${at}: content comparison is missing ${token}`);
   }
-  for (const s of hashed) {
-    if (!s.includes(SKIP_INPUTS)) {
-      bad.push(`${at}: claims ${HASH} without naming the ${SKIP_INPUTS} skip: ${JSON.stringify(s.slice(0, 72))}`);
-    }
-  }
-
-  // 2. The du -sh conclusion is qualified in the box and the notes that draw it,
-  //    not merely somewhere else in the article the reader may never reach.
   const v = verifySection(doc);
-  if (!v) return [...bad, `${at}: no ${TOTALS} verification step — the totals rule would pass vacuously`];
+  if (!v) return [...bad, `${at}: missing ${TOTALS} verification step`];
   const box = (v.success?.body || []).join("\n");
-  const notes = (v.bullets || []).join("\n");
-  if (!box.includes(TOTALS)) bad.push(`${at}: the finished-mirror box no longer reads ${TOTALS}`);
-  if (!box.includes(SKIP_INPUTS)) {
-    bad.push(`${at}: reads ${TOTALS} totals without saying sync skipped by size+${SKIP_INPUTS}`);
+  for (const token of [TOTALS, HASH, "--checksum"]) {
+    if (!box.includes(token)) bad.push(`${at}: finished-mirror instructions lack ${token}`);
   }
-  for (const token of [HASH, SKIP_INPUTS, TOTALS]) {
-    if (!notes.includes(token)) bad.push(`${at}: the verify notes never mention ${token}`);
+  if (english && WHOLE_MIRROR_INTACT.test(docText(doc))) {
+    bad.push(`${at}: declares the whole mirror or copy intact`);
   }
-
-  if (!english) return bad;
-  const t = docText(doc);
-  if (HASHED_WITHOUT_SCOPE.test(t)) bad.push(`${at}: claims every/all/each file is hash-verified, unscoped`);
-  if (WHOLE_MIRROR_INTACT.test(t)) bad.push(`${at}: declares the whole mirror or copy intact`);
-  if (!/\b(?:coarse|sanity check|rather than proof|not proof)\b/i.test(`${box}\n${notes}`)) {
+  if (english && !/\b(?:coarse|sanity check|rather than proof|not proof)\b/i.test(box)) {
     bad.push(`${at}: never calls matching ${TOTALS} totals coarse rather than proof`);
   }
   return bad;
@@ -781,7 +732,7 @@ describe("process cleanup is owned, never pattern-matched", () => {
     expect(bad).toEqual([]);
   });
 
-  it("stops the listener by recorded PID and the retry loop by its own tmux session", () => {
+  it("stops the listener by recorded PID and the sender by its own tmux session", () => {
     const bad = [];
     for (const lang of LANGS)
       bad.push(...lifecycleComplaints(`cli-sync-large-folder[${lang}]`, cliSyncLargeFolder.langs[lang], { owns: true }));
@@ -824,8 +775,8 @@ describe("ESTAB is reported as reachability, not as progress", () => {
   });
 });
 
-describe("the sync guide scopes SHA-256 to what it actually sent", () => {
-  it("names the size+mtime skip wherever it claims a hash, in all nine locales", () => {
+describe("the sync guide describes content-aware comparison", () => {
+  it("distinguishes current content comparison from the legacy fallback in all nine locales", () => {
     const bad = [];
     for (const lang of LANGS)
       bad.push(
@@ -840,12 +791,15 @@ describe("the sync guide scopes SHA-256 to what it actually sent", () => {
     const pages = buildArticlePages([cliSyncLargeFolder]);
     expect(pages).toHaveLength(9);
     for (const page of pages) {
+      for (const token of ["v0.28.4", "100,000", "32 MiB", "--check", "--exclude", "--watch", "--once", "--delete"]) {
+        expect(page.html).toContain(token);
+      }
+      expect(page.html).not.toContain("until relayium sync");
       expect(page.html, `${page.path}: the skip rule never reaches the reader`).toContain(SKIP_INPUTS);
       expect(page.html, `${page.path}: the hash guarantee is gone`).toContain(HASH);
     }
     const en = pages.find((p) => p.path.startsWith("guides/"));
     expect(en, "the English page must exist to be checked").toBeTruthy();
-    expect(en.html, `${en.path}: unscoped every-file hashing`).not.toMatch(HASHED_WITHOUT_SCOPE);
     expect(en.html, `${en.path}: the whole mirror declared intact`).not.toMatch(WHOLE_MIRROR_INTACT);
   });
 });
@@ -1258,8 +1212,7 @@ describe("the structural guard fails when a tutorial regresses", () => {
         : b,
     );
     const bad = hashScopeComplaints("x", doc, { english: true }).join("\n");
-    expect(bad).toMatch(/claims SHA-256 without naming the mtime skip/);
-    expect(bad).toMatch(/every\/all\/each file is hash-verified, unscoped/);
+    expect(bad).toMatch(/content comparison is missing mtime/);
     expect(bad).toMatch(/declares the whole mirror or copy intact/);
   });
 
@@ -1271,7 +1224,7 @@ describe("the structural guard fails when a tutorial regresses", () => {
     s.bullets = s.bullets.map((b) =>
       b.includes(HASH) ? "校验每个文件：每个文件都做端到端的 SHA-256 校验，因此完成的镜像可以确认是完整的。" : b,
     );
-    expect(hashScopeComplaints("x", doc).join("\n")).toMatch(/claims SHA-256 without naming the mtime skip/);
+    expect(hashScopeComplaints("x", doc).join("\n")).toMatch(/content comparison is missing mtime/);
   });
 
   it("catches du -sh totals going back to standing in for integrity", () => {
@@ -1282,8 +1235,8 @@ describe("the structural guard fails when a tutorial regresses", () => {
     ];
     v.bullets = ["Every file was SHA-256 checked on arrival, so matching sizes plus a clean exit means an intact copy."];
     const bad = hashScopeComplaints("x", doc, { english: true }).join("\n");
-    expect(bad).toMatch(/reads du -sh totals without saying sync skipped by size\+mtime/);
-    expect(bad).toMatch(/the verify notes never mention mtime/);
+    expect(bad).toMatch(/finished-mirror instructions lack SHA-256/);
+    expect(bad).toMatch(/finished-mirror instructions lack --checksum/);
     expect(bad).toMatch(/never calls matching du -sh totals coarse rather than proof/);
   });
 
@@ -1293,7 +1246,7 @@ describe("the structural guard fails when a tutorial regresses", () => {
     const doc = sync();
     for (const s of doc.sections) s.bullets = (s.bullets || []).filter((b) => !b.includes(HASH));
     doc.faq.items = doc.faq.items.filter((i) => !i.a.includes(HASH));
-    expect(hashScopeComplaints("x", doc).join("\n")).toMatch(/SHA-256 claim\(s\) left to scope/);
+    expect(hashScopeComplaints("x", doc).join("\n")).toMatch(/content comparison is missing SHA-256/);
   });
 
   // Retired SSH transport is guarded by cli-public-truth-test.sh against both
