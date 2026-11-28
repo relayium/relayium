@@ -867,6 +867,9 @@ func (s *Service) RequestMagicLink(ctx context.Context, email string) error {
 		ExpiresAt: now.Add(s.cfg.MagicTTL).Unix(),
 	}
 	if err := s.store.CreateMagicToken(ctx, tok); err != nil {
+		if errors.Is(err, ErrInvalidEmail) {
+			return nil
+		}
 		return err
 	}
 	// Fragments are never sent in HTTP request targets, so reverse proxies and
