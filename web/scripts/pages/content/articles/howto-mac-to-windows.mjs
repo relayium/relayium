@@ -6,12 +6,13 @@
 import { browserCrossNetworkSection } from "../realtime-facts.mjs";
 
 const en = {
+  updated: "2026-11-28",
   title: "Transfer files between a Mac and a Windows PC",
   description:
     "How to send files between macOS and Windows without a flash drive, a shared network folder, or a cloud upload. Both same network and over the internet — nothing to install on either machine.",
   updatedLabel: "Last updated",
   lead: [
-    "Macs and PCs don't speak the same file-sharing language out of the box. AirDrop is Apple-only, Windows' network sharing wants both machines on a matching workgroup or domain, and neither one is exactly friendly to set up in five minutes when you just want to move one folder of project files from a MacBook to a Windows desktop.",
+    "To move a project folder from a MacBook to a Windows PC, open Relayium in both browsers. On the same Wi-Fi you can send the folder without setting up a shared drive.",
     "Relayium sidesteps the whole compatibility question. Open the same page on both computers: on the same LAN the end-to-end encrypted files travel directly, while across networks a TURN relay carries ciphertext it cannot read or decrypt and keeps no realtime content copy or history. Nothing needs installing; the creator signs in for cross-network pairing, while the person joining never needs an account. Here's exactly how it works in both directions.",
   ],
   sections: [
@@ -165,12 +166,13 @@ const en = {
 };
 
 const zh = {
+  updated: "2026-11-28",
   title: "如何在 Mac 和 Windows 电脑之间传输文件",
   description:
     "在 macOS 和 Windows 之间传文件，不用 U 盘、不用共享文件夹、不用上传网盘。同一网络和跨互联网都能用——两台电脑都无需安装任何东西。",
   updatedLabel: "最近更新",
   lead: [
-    "Mac 和 PC 天生就不说同一种文件共享语言。AirDrop 只属于苹果生态，Windows 的网络共享又要求两台机器加入匹配的工作组或域，两者都不是那种能在五分钟内搞定的东西——而你可能只是想把 MacBook 上一个项目文件夹搬到 Windows 台式机上。",
+    "把 MacBook 上的项目文件夹传到 Windows 电脑，可以在两台电脑的浏览器打开 Relayium。同一 Wi-Fi 下即可发送，无需先配置共享文件夹。",
     "Relayium 绕开了这整套兼容性难题。在两台电脑上打开同一个页面：同一局域网内，端到端加密的文件会直接传输；跨网络时，TURN 中继只搬运它无法读取或解密的密文，也不保留实时内容副本或历史。两个系统都无需安装；跨网络配对由创建者登录，加入者始终无需账号。下面详细说明两个方向的具体做法。",
   ],
   sections: [

@@ -56,9 +56,9 @@ const en: Messages = {
   footer: "End-to-end encrypted (X25519 + AES-256-GCM) · same-network sessions stay direct; cross-network TURN carries ciphertext that servers and relays cannot decrypt",
   offlineFooter: "Encrypted in your browser with AES-256-GCM before upload · the server stores only ciphertext it can't decrypt — the decryption key lives solely in the link.",
   busy: "A transfer is already in progress — please wait for it to finish",
-  titleDefault: "Relayium — end-to-end encrypted file and text transfer",
+  titleDefault: "Send files and text between your phone and computer | Relayium",
   descDefault:
-    "Open-source, end-to-end encrypted file and text transfer in your browser. Files stream directly on your local network or through a ciphertext-only relay across networks. Text needs both devices online; Relayium servers keep no message bodies or history, though either endpoint may retain it.",
+    "Send files and text between Windows, Mac, Android and iPhone in your browser. Transfers are end-to-end encrypted. On the same Wi-Fi, no install or account is needed.",
   titleCross: "Cross-network file and live text transfer — end-to-end encrypted | Relayium",
   titleOffline: "Encrypted file link — upload now, download later | Relayium",
   descCross: "Send files and live ephemeral text across networks with a 6-digit code. The creator signs in; joining needs no account. TURN carries only end-to-end encrypted ciphertext.",
