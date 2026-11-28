@@ -1,6 +1,37 @@
 package account
 
-import "strings"
+import (
+	"net/mail"
+	"strings"
+
+	"golang.org/x/net/idna"
+)
+
+// validRegistrationEmail checks a bare mailbox with a multi-label DNS domain.
+// Mailbox ownership is checked separately by the verification email.
+func validRegistrationEmail(email string) bool {
+	if _, err := mail.ParseAddress("<" + email + ">"); err != nil {
+		return false
+	}
+	at := strings.LastIndexByte(email, '@')
+	if at < 1 {
+		return false
+	}
+	domain, err := idna.Lookup.ToASCII(email[at+1:])
+	if err != nil || len(domain) > 253 {
+		return false
+	}
+	labels := strings.Split(domain, ".")
+	if len(labels) < 2 {
+		return false
+	}
+	for _, label := range labels {
+		if len(label) == 0 || len(label) > 63 {
+			return false
+		}
+	}
+	return strings.Trim(labels[len(labels)-1], "0123456789") != ""
+}
 
 // canonicalEmail folds an address to the form used ONLY for anti-Sybil
 // register dedupe (NOT for login/identity — normEmail stays exact). It lowercases
